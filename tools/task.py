@@ -1,8 +1,8 @@
 """PitWall task helper: the ONLY git commands a teammate needs.
 
     python tools/task.py role SIM          # once: who am I (BR | SIM | DAT | UI)
-    python tools/task.py start SIM2        # before a task: fresh main -> new branch sim/sim2
-    python tools/task.py ship "lap_time vectorised"   # after the AI is done: test, commit, push, PR, merge
+    python tools/task.py start rain-model  # before a task: fresh main -> new branch sim/rain-model
+    python tools/task.py ship "better rain model"     # after the AI is done: test, commit, (push, PR, merge)
     python tools/task.py check             # at checkpoints: update main, run all tests + demo race
     python tools/task.py status            # what changed, and is it all mine?
 
@@ -22,31 +22,17 @@ ROLE_FILE = ROOT / ".pitwall_role"
 ROLES = ("BR", "SIM", "DAT", "UI")
 TEST_CMD = [sys.executable, "-m", "pytest", "-q", "-m", "not network and not slow"]
 
-# Who may edit what (PLAN.md section 4). BR may edit anything, but gets a warning outside its own files.
+# Who may edit what (MODULES.md). BR may edit anything, but gets a warning outside its own files.
 OWNERS: dict[str, list[str]] = {
-    "BR": [
-        "pitwall/types.py", "pitwall/__init__.py", "pitwall/*/__init__.py",
-        "pitwall/strategy/rollout_core.py", "pitwall/strategy/rollout.py", "pitwall/strategy/oracle.py",
-        "pitwall/eval/batch.py", "pitwall/eval/fairness.py",
-        "results/eval_*", "results/rain_sweep*", "results/mismatch_*", "results/mock_*", "results/replay_index.json",
-        "data/params/mock.json", "data/pirelli/mock.json",
-        "AGENTS.md", "CLAUDE.md", "GEMINI.md", "requirements.txt", ".gitignore", ".gitattributes",
-        "pytest.ini", "docs/*", ".github/*", "tools/*", "scripts/*",
-        "tests/test_contract.py", "tests/test_rollout.py", "tests/test_eval.py", "tests/conftest.py",
-    ],
-    "SIM": [
-        "pitwall/sim/*", "pitwall/eval/metrics.py", "results/summary.json", "results/replay_*",
-        "tests/test_sim.py", "tests/test_replay.py", "tests/test_metrics.py",
-    ],
-    "DAT": [
-        "pitwall/data/*", "pitwall/params.py", "data/*",
-        "pitwall/strategy/rules_config.py", "pitwall/strategy/rules.py",
-        "pitwall/strategy/pirelli.py", "pitwall/strategy/real.py",
-        "results/model_accuracy.json", "tests/test_data.py", "tests/test_baselines.py",
-    ],
-    "UI": ["app/*", "pitch/*", "README.md", "results/demo_*", "tests/test_app.py"],
+    "BR": ["pitwall/strategy/*", "pitwall/eval/*", "pitwall/core.py", "pitwall/__init__.py",
+           "tests/test_strategy.py", "tests/test_eval.py", "tests/conftest.py",
+           "results/eval_*", "results/mismatch_*", "results/rain_sweep_*", "results/summary.json",
+           "tools/*", "AGENTS.md", "MODULES.md", "requirements.txt", ".gitignore", "pytest.ini"],
+    "SIM": ["pitwall/engine/*", "tests/test_engine.py", "results/replay_*"],
+    "DAT": ["pitwall/data/*", "data/*", "tests/test_data.py"],
+    "UI": ["frontend/*", "pitwall/server.py", "pitch/*", "README.md", "tests/test_api.py"],
 }
-NOT_DAT = ["data/params/mock.json", "data/pirelli/mock.json"]  # BR's mocks inside DAT's folder
+NOT_DAT: list[str] = []
 
 
 def run(cmd: list[str], check: bool = True, capture: bool = False) -> subprocess.CompletedProcess:
@@ -110,19 +96,17 @@ def cmd_role(args: list[str]) -> None:
 def cmd_start(args: list[str]) -> None:
     r = role()
     if not args:
-        die("usage: python tools/task.py start <TASK_ID>, e.g. start SIM2")
-    task = args[0].upper()
-    if not task.startswith(r):
-        die(f"task {task} is not a {r} task. Check docs/roles/{r}.md")
+        die("usage: python tools/task.py start <short-name>, e.g. start rain-model")
+    task = args[0].lower().replace(" ", "-")
     if out(["git", "status", "--porcelain"]):
         die("you have unsaved changes. Finish them with 'ship' first, or ask the team.")
     run(["git", "switch", "main"])
     if has_origin():
         run(["git", "pull", "--ff-only"])
-    name = f"{r.lower()}/{task.lower()}"
+    name = f"{r.lower()}/{task}"
     exists = run(["git", "rev-parse", "--verify", name], check=False, capture=True).returncode == 0
     run(["git", "switch", name] if exists else ["git", "switch", "-c", name])
-    print(f"\nReady. Now tell your AI:\n  Read AGENTS.md, then do task {task} from docs/roles/{r}.md.")
+    print(f"\nReady. Now tell your AI:\n  Read AGENTS.md and MODULES.md (section {r}), then: <what you want improved>")
     print(f"When it is done and its tests pass, run:\n  python tools/task.py ship \"<what you did>\"")
 
 
@@ -130,14 +114,14 @@ def cmd_ship(args: list[str]) -> None:
     r = role()
     b = branch()
     if b == "main":
-        die("you are on main. Start a task first: python tools/task.py start <TASK_ID>")
-    task = b.split("/")[-1].upper()
+        die("you are on main. Start first: python tools/task.py start <short-name>")
+    task = b.split("/")[-1]
     print("\n1/5 Running tests")
     if subprocess.run(TEST_CMD, cwd=ROOT).returncode != 0:
         die("tests fail. Ask your AI to fix them, then ship again.")
     problems = ownership_problems(r)  # checked after tests, so files the tests create are covered too
     if problems and r != "BR":
-        die("these files are not yours (PLAN.md section 4). Undo them or ask the owner:\n  " + "\n  ".join(problems))
+        die("these files are not yours (MODULES.md). Undo them or ask the owner:\n  " + "\n  ".join(problems))
     if problems:
         print("WARNING (lead): touching files owned by others:\n  " + "\n  ".join(problems))
     print("\n2/5 Committing")
@@ -169,7 +153,7 @@ def cmd_ship(args: list[str]) -> None:
     run(["gh", "pr", "merge", b, "--merge"])
     run(["git", "switch", "main"])
     run(["git", "pull", "--ff-only"])
-    print(f"\nShipped {task}. Next: python tools/task.py start <next task ID>")
+    print(f"\nShipped {task}. Next: python tools/task.py start <next-thing>")
 
 
 def cmd_check(_: list[str]) -> None:
@@ -179,7 +163,7 @@ def cmd_check(_: list[str]) -> None:
     if has_origin():
         run(["git", "pull", "--ff-only"])
     ok = subprocess.run([sys.executable, "-m", "pytest", "-q"], cwd=ROOT).returncode == 0
-    ok &= subprocess.run([sys.executable, "-m", "pitwall.sim.race", "--demo"], cwd=ROOT).returncode == 0
+    ok &= subprocess.run([sys.executable, "-m", "pitwall.engine.race"], cwd=ROOT).returncode == 0
     print("\nCHECKPOINT OK" if ok else "\nCHECKPOINT FAILED: post the error in the team chat")
 
 

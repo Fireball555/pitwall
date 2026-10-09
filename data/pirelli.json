@@ -1,0 +1,43 @@
+{
+  "_source": "PLACEHOLDER plans. Dharshini replaces them with Pirelli's published 2023 race-preview strategies.",
+  "bahrain": {
+    "start": "SOFT",
+    "stops": [
+      {
+        "lap": 15,
+        "compound": "HARD"
+      },
+      {
+        "lap": 36,
+        "compound": "HARD"
+      }
+    ]
+  },
+  "monza": {
+    "start": "MEDIUM",
+    "stops": [
+      {
+        "lap": 22,
+        "compound": "HARD"
+      }
+    ]
+  },
+  "zandvoort": {
+    "start": "MEDIUM",
+    "stops": [
+      {
+        "lap": 28,
+        "compound": "HARD"
+      }
+    ]
+  },
+  "singapore": {
+    "start": "MEDIUM",
+    "stops": [
+      {
+        "lap": 24,
+        "compound": "HARD"
+      }
+    ]
+  }
+}

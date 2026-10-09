@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .DS_Store
-.env
-scratch/
 .pitwall_role
+.env
+data/real/*_synthetic.parquet
+frontend/node_modules/

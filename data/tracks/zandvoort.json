@@ -1,0 +1,147 @@
+{
+  "name": "zandvoort",
+  "laps": 72,
+  "base_lap": {
+    "value": 74.8473,
+    "source": "fitted from 2022 races (FastF1)"
+  },
+  "compounds": {
+    "SOFT": {
+      "offset": {
+        "value": -0.2315,
+        "source": "fitted from 2022 races (FastF1)"
+      },
+      "deg": {
+        "value": 0.0531,
+        "source": "fitted from 2022 races (FastF1)"
+      },
+      "cliff_lap": 18,
+      "cliff_coef": 0.05,
+      "warmup": 0.8,
+      "wet_pen": [
+        0.0,
+        8.0,
+        20.0
+      ]
+    },
+    "MEDIUM": {
+      "offset": {
+        "value": 0.0,
+        "source": "fitted from 2022 races (FastF1)"
+      },
+      "deg": {
+        "value": 0.0511,
+        "source": "fitted from 2022 races (FastF1)"
+      },
+      "cliff_lap": 30,
+      "cliff_coef": 0.05,
+      "warmup": 1.2,
+      "wet_pen": [
+        0.0,
+        8.0,
+        20.0
+      ]
+    },
+    "HARD": {
+      "offset": {
+        "value": 0.1505,
+        "source": "fitted from 2022 races (FastF1)"
+      },
+      "deg": {
+        "value": 0.0296,
+        "source": "fitted from 2022 races (FastF1)"
+      },
+      "cliff_lap": 42,
+      "cliff_coef": 0.05,
+      "warmup": 1.8,
+      "wet_pen": [
+        0.0,
+        8.0,
+        20.0
+      ]
+    },
+    "INTER": {
+      "offset": 0.0,
+      "deg": 0.05,
+      "cliff_lap": 30,
+      "cliff_coef": 0.05,
+      "warmup": 1.0,
+      "wet_pen": [
+        5.0,
+        0.0,
+        4.0
+      ]
+    },
+    "WET": {
+      "offset": 0.0,
+      "deg": 0.04,
+      "cliff_lap": 35,
+      "cliff_coef": 0.05,
+      "warmup": 1.0,
+      "wet_pen": [
+        10.0,
+        3.0,
+        0.0
+      ]
+    }
+  },
+  "fuel_start": 110.0,
+  "fuel_burn": {
+    "value": 1.4972,
+    "source": "110 kg / laps"
+  },
+  "fuel_effect": {
+    "value": 0.0275,
+    "source": "fitted from 2022 races (FastF1)"
+  },
+  "pit_loss": {
+    "value": 23.045,
+    "source": "fitted from 2022 races (FastF1), median of 33 stops"
+  },
+  "pit_loss_sc": {
+    "value": 12.6748,
+    "source": "assumed 0.55 x pit loss (28 SC stops, too few or unreliable)"
+  },
+  "sc_factor": {
+    "value": 1.4109,
+    "source": "fitted from 2022 races (FastF1)"
+  },
+  "vsc_factor": 1.3,
+  "p_sc": {
+    "value": 0.0139,
+    "source": "FastF1 2018-2023, 3 races at this track"
+  },
+  "p_vsc": {
+    "value": 0.0093,
+    "source": "FastF1 2018-2023, 3 races at this track"
+  },
+  "sc_len": {
+    "value": [
+      1,
+      6
+    ],
+    "source": "FastF1 2018-2023, 3 races at this track"
+  },
+  "p_rain": {
+    "value": 0.333,
+    "source": "FastF1 2018-2023, 3 races at this track (share of races where inters or wets were used)"
+  },
+  "noise_sd": {
+    "value": 0.5404,
+    "source": "fitted from 2022 races (FastF1)"
+  },
+  "allocation": {
+    "SOFT": 8,
+    "MEDIUM": 3,
+    "HARD": 2,
+    "INTER": 4,
+    "WET": 3
+  },
+  "endurance": {
+    "tank": 57.4,
+    "refuel_rate": 9.0
+  },
+  "sources": {
+    "_all": "fitted from 2022 races (FastF1) where marked; unmarked values are placeholders"
+  }
+}
