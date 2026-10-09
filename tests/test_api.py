@@ -37,3 +37,17 @@ def test_proof_and_replay_answer():
 def test_zandvoort_replay_is_refused_with_a_reason():
     r = client.get("/api/replay/drivers", params={"track": "zandvoort"})
     assert r.status_code == 400 and "red flag" in r.json()["detail"]
+
+
+def test_replay_has_what_the_race_screen_draws():
+    drivers = client.get("/api/replay/drivers", params={"track": "bahrain"}).json()
+    rep = client.get("/api/replay", params={"track": "bahrain", "driver": drivers["drivers"][0]}).json()
+    n = len(rep["laps"])
+    assert len(rep["status"]) == n and len(rep["ghost"]) == n and len(rep["lap_ref"]) == n
+    assert "OURS" in rep["grid"] and rep["laps"][0]["order"]
+
+
+def test_summary_and_endurance_fuel_fields():
+    assert "tracks" in client.get("/api/summary").json()
+    r = client.get("/api/race", params={"track": "bahrain", "mode": "endurance", "seed": 3, "n": 20}).json()
+    assert r["tank"] > 0 and r["fuel_burn"] > 0 and "tyre_life" in r["cars"]["rollout"]

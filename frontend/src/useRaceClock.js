@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 
-// Smooth race clock for the Live race screen. t = laps completed (a float), so the map can
-// move cars continuously while the dashboards update once per lap.
-// resumeAt: lap to continue from when a new race arrives (used by "rain now"); null = start.
-export function useRaceClock(laps, resetKey, resumeAt = null) {
+// Smooth race clock. t = laps completed (a float), so maps move cars continuously while the
+// dashboards update once per lap. resumeAt: lap to continue from when a new race arrives
+// (used by "rain now"); autoplay: start playing as soon as a race arrives.
+export function useRaceClock(laps, resetKey, resumeAt = null, autoplay = true) {
   const [t, setT] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [secPerLap, setSecPerLap] = useState(2);
   const raf = useRef(0);
 
-  useEffect(() => { setT(resumeAt ? Math.min(laps, resumeAt - 1) : 0); setPlaying(true); }, [resetKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setT(resumeAt ? Math.min(laps, resumeAt - 1) : 0); setPlaying(autoplay || !!resumeAt); }, [resetKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!playing) return undefined;
@@ -28,8 +28,8 @@ export function useRaceClock(laps, resetKey, resumeAt = null) {
     return () => cancelAnimationFrame(raf.current);
   }, [playing, secPerLap, laps]);
 
-  const lap = Math.max(1, Math.min(laps, Math.floor(t) + 1));        // the lap being driven (1-based)
-  const frac = t >= laps ? 0 : t - Math.floor(t);       // how far round that lap the leader is
+  const lap = Math.max(1, Math.min(laps, Math.floor(t) + 1));   // the lap being driven (1-based)
+  const frac = t >= laps ? 0 : t - Math.floor(t);                // how far round that lap the leader is
   const finished = t >= laps;
   return {
     t, lap, frac, finished, playing, secPerLap, setSecPerLap,

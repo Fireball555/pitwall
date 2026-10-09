@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api.js";
 import CarCard from "./CarCard.jsx";
 import { CARS, ORDER, TRACK_NAMES } from "./theme.js";
+import Timeline from "./Timeline.jsx";
 import TrackMap from "./TrackMap.jsx";
 import { useRaceClock } from "./useRaceClock.js";
 
@@ -131,7 +132,7 @@ function Stage({ data, clock, busy, force }) {
   return (
     <>
       <div className={`stage ${busy ? "stale" : ""}`}>
-        <div className="side">{card("rollout")}{card("pirelli")}</div>
+        <div className="side left">{card("rollout")}{card("pirelli")}</div>
         <div className="center">
           <div className="lap-head">
             <div className="lap-big">Lap <b>{lap}</b><small>/{data.laps}</small></div>
@@ -153,7 +154,8 @@ function Stage({ data, clock, busy, force }) {
         </div>
         <div className="side">{card("rules")}{card("oracle")}</div>
       </div>
-      <Timeline data={data} clock={clock} />
+      <Timeline laps={data.laps} status={data.status} wetness={data.wetness} clock={clock}
+        stops={[{ laps: data.cars.rollout.pitted.map((p, k) => (p && k > 0 ? k + 1 : null)).filter(Boolean), colour: CARS.rollout.colour, label: "PitWall stop" }]} />
     </>
   );
 }
@@ -189,34 +191,5 @@ function Verdict({ data }) {
     <p className="verdict2">
       {g >= 0 ? <>PitWall beat the Pirelli plan by <b>{g.toFixed(1)} s</b></> : <>The Pirelli plan beat PitWall by <b>{(-g).toFixed(1)} s</b> this time</>}
     </p>
-  );
-}
-
-// Play/pause, speed, and a lap scrubber that shows safety cars, rain and PitWall's stops.
-function Timeline({ data, clock }) {
-  const n = data.laps;
-  const marks = [];
-  data.status.forEach((s, k) => { if (s !== "GREEN") marks.push({ k, cls: s.toLowerCase() }); });
-  data.wetness.forEach((w, k) => { if (w > 0.2) marks.push({ k, cls: "rain" }); });
-  const stops = data.cars.rollout.pitted.map((p, k) => (p && k > 0 ? k : null)).filter((k) => k != null);
-  return (
-    <div className="timeline">
-      {clock.playing
-        ? <button className="btn" onClick={clock.pause}>Pause</button>
-        : <button className="btn primary" onClick={clock.play}>{clock.finished ? "Watch again" : "Play"}</button>}
-      <div className="scrub">
-        <div className="scrub-bands" aria-hidden="true">
-          {marks.map((m, k) => <span key={k} className={m.cls} style={{ left: `${(100 * m.k) / n}%`, width: `${100 / n}%` }} />)}
-          {stops.map((k) => <i key={k} style={{ left: `${(100 * (k + 0.5)) / n}%`, background: CARS.rollout.colour }} />)}
-        </div>
-        <input type="range" min={1} max={n} step={1} value={clock.lap} aria-label="Lap"
-          onChange={(e) => clock.seek(+e.target.value)} />
-      </div>
-      <div className="seg2" role="group" aria-label="Speed">
-        {[1, 2, 5].map((s) => (
-          <button key={s} className={clock.secPerLap === s ? "on" : ""} aria-pressed={clock.secPerLap === s} onClick={() => clock.setSecPerLap(s)}>{s} s/lap</button>
-        ))}
-      </div>
-    </div>
   );
 }

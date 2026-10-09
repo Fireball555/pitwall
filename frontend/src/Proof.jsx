@@ -3,38 +3,65 @@ import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Responsive
 import { api } from "./api.js";
 import { CARS, TRACK_NAMES, signed } from "./theme.js";
 
-const tip = { contentStyle: { background: "#17304d", border: "1px solid #27476b" } };
+const tip = { contentStyle: { background: "#13233a", border: "1px solid #213654" } };
 
 export default function Proof() {
   const [track, setTrack] = useState("bahrain");
   const [mode, setMode] = useState("f1");
   const [d, setD] = useState(null);
+  const [board, setBoard] = useState(null);
   const [err, setErr] = useState(null);
   useEffect(() => { setD(null); api.proof(track, mode).then(setD).catch((e) => setErr(e.message)); }, [track, mode]);
+  useEffect(() => { api.summary(mode).then(setBoard).catch(() => setBoard(null)); }, [mode]);
 
   return (
     <div className="proof">
-      <div className="toolbar">
-        <h2>Is it better, or just lucky?</h2>
-        <p className="help">Every race is run with all four cars in identical weather, safety cars and lap noise, so each race is a fair head-to-head.</p>
-        <div className="row">
-          {Object.entries(TRACK_NAMES).map(([id, n]) => (
-            <button key={id} className={`chip ${track === id ? "on" : ""}`} onClick={() => setTrack(id)}>{n}</button>
-          ))}
-          <span className="sep" />
-          <button className={`chip ${mode === "f1" ? "on" : ""}`} onClick={() => setMode("f1")}>F1</button>
-          <button className={`chip ${mode === "endurance" ? "on" : ""}`} onClick={() => setMode("endurance")}>Endurance</button>
+      <div className="real-head">
+        <div>
+          <h2>Is it better, or just lucky?</h2>
+          <p className="help">1000 random races per track. In every race all four cars get identical weather, safety cars and lap noise, so each race is a fair head-to-head. "Gain" = how many seconds earlier PitWall finished.</p>
+        </div>
+        <div className="field">
+          <span className="field-label">Rules</span>
+          <div className="seg2" role="group" aria-label="Rules">
+            <button className={mode === "f1" ? "on" : ""} aria-pressed={mode === "f1"} onClick={() => setMode("f1")}>F1</button>
+            <button className={mode === "endurance" ? "on" : ""} aria-pressed={mode === "endurance"} onClick={() => setMode("endurance")}>Endurance</button>
+          </div>
         </div>
       </div>
+      <Scoreboard board={board} track={track} setTrack={setTrack} />
       {err && <p className="error">{err}</p>}
       {d && !d.available && (
         <div className="panel empty">
           <h3>No results yet for {TRACK_NAMES[track]} ({mode === "f1" ? "F1" : "endurance"})</h3>
-          <p>Run the test on the laptop with the most cores, then reload this page:</p>
+          <p>{mode === "endurance" ? "The endurance test runs on Bahrain and Singapore. " : ""}Run the test, then reload this page:</p>
           <pre>python -m pitwall.eval.batch --all --n 1000</pre>
         </div>
       )}
       {d?.available && d.main && <Results d={d} />}
+    </div>
+  );
+}
+
+// One tile per track: the headline gain against both baselines. Click to see the details below.
+function Scoreboard({ board, track, setTrack }) {
+  return (
+    <div className="board" role="group" aria-label="Track">
+      {Object.entries(TRACK_NAMES).map(([id, name]) => {
+        const t = board?.tracks.find((x) => x.track === id);
+        return (
+          <button key={id} className={`board-tile ${track === id ? "on" : ""}`} aria-pressed={track === id} onClick={() => setTrack(id)}>
+            <span className="board-name">{name}</span>
+            {t ? (
+              <>
+                <span className="board-big">{signed(t.gain_pirelli[0])}<small> s</small></span>
+                <span className="board-sub">vs Pirelli plan · won {Math.round(100 * t.win_pirelli)}%</span>
+                <span className="board-sub2">{signed(t.gain_rules[0])} s vs simple rules · won {Math.round(100 * t.win_rules)}%</span>
+              </>
+            ) : <span className="board-sub">not run in this mode</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -58,9 +85,9 @@ function Results({ d }) {
           <p className="help">Each bar counts races. Right of zero, PitWall finished ahead.</p>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={d.histogram} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="#27476b" strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="from" stroke="#93a9c2" tickFormatter={(v) => v.toFixed(1)} />
-              <YAxis stroke="#93a9c2" width={36} allowDecimals={false} />
+              <CartesianGrid stroke="#213654" strokeDasharray="2 4" vertical={false} />
+              <XAxis dataKey="from" stroke="#8ba1bd" interval={4} tickFormatter={(v) => `${v >= 0 ? "+" : ""}${v.toFixed(0)}`} label={{ value: "seconds gained (left of 0: PitWall lost)", position: "insideBottom", offset: -2, fill: "#8ba1bd", fontSize: 12 }} height={40} />
+              <YAxis stroke="#8ba1bd" width={36} allowDecimals={false} />
               <Tooltip {...tip} labelFormatter={(v, p) => p?.[0] ? `${signed(p[0].payload.from)} to ${signed(p[0].payload.to)} s` : ""} formatter={(v) => [v, "races"]} />
               <Bar dataKey="count" isAnimationActive={false}>
                 {d.histogram.map((h, i) => <Cell key={i} fill={h.to <= 0 ? "#64748b" : CARS.rollout.colour} />)}
@@ -73,9 +100,9 @@ function Results({ d }) {
           <p className="help">Dry: nothing happened. Chaotic: two or more safety cars. Wet: it rained.</p>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={tags} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="#27476b" strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="tag" stroke="#93a9c2" />
-              <YAxis stroke="#93a9c2" width={36} />
+              <CartesianGrid stroke="#213654" strokeDasharray="2 4" vertical={false} />
+              <XAxis dataKey="tag" stroke="#8ba1bd" />
+              <YAxis stroke="#8ba1bd" width={36} />
               <Tooltip {...tip} formatter={(v, n) => [`${signed(v)} s`, `vs ${CARS[n].label}`]} />
               <Legend formatter={(n) => `vs ${CARS[n].label}`} />
               <Bar dataKey="pirelli" fill={CARS.pirelli.colour} isAnimationActive={false} />
@@ -99,14 +126,15 @@ function Results({ d }) {
         </div>
         <div className="panel">
           <h3>More rain, bigger advantage</h3>
+          <p className="help">Seconds gained on the Pirelli plan as the chance of rain goes up.</p>
           {d.rain_sweep.length ? (
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={d.rain_sweep} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="#27476b" strokeDasharray="2 4" />
-                <XAxis dataKey="rain_prob" stroke="#93a9c2" tickFormatter={(v) => `${Math.round(v * 100)}%`} />
-                <YAxis stroke="#93a9c2" width={36} />
+                <CartesianGrid stroke="#213654" strokeDasharray="2 4" />
+                <XAxis dataKey="rain_prob" stroke="#8ba1bd" tickFormatter={(v) => `${Math.round(v * 100)}%`} label={{ value: "chance of rain in the race (Zandvoort)", position: "insideBottom", offset: -2, fill: "#8ba1bd", fontSize: 12 }} height={40} />
+                <YAxis stroke="#8ba1bd" width={36} />
                 <Tooltip {...tip} labelFormatter={(v) => `Chance of rain ${Math.round(v * 100)}%`} formatter={(v) => [`${signed(v)} s`, "gain on Pirelli plan"]} />
-                <Line dataKey="gain_vs_pirelli" stroke={CARS.rollout.colour} strokeWidth={3} isAnimationActive={false} />
+                <Line dataKey="gain_vs_pirelli" stroke={CARS.rollout.colour} strokeWidth={3} dot={{ r: 4, fill: CARS.rollout.colour }} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           ) : <p className="help">Not run yet.</p>}
