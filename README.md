@@ -25,7 +25,7 @@ To prove it works, four identical cars race identical conditions; only the strat
 | Purple | A fixed pre-race plan, followed blindly (Bahrain: Pirelli's 2023 preview; other tracks: assumed one-stop, see `data/pirelli.json`) |
 | Orange | Simple rules (pit when tyres are worn, inters when wet) |
 | **Cyan** | **Ours (PitWall)** |
-| Grey | Oracle: knows the real future, as an upper reference |
+| Grey | Hindsight: PitWall's own method, but given the real future (a reference, not a perfect optimum) |
 
 There are two modes:
 - **F1:** real 2023 rules, no refuelling.
@@ -43,7 +43,7 @@ The Python server runs the simulator and also serves the built React app, so the
 ```
 browser (React)  --/api/race, /api/proof, /api/replay-->  FastAPI (pitwall/server.py)
                                                            |-- engine/    lap model, safety cars, rain, pit stops
-                                                           |-- strategy/  Pirelli plan, rules, our rollout, Oracle
+                                                           |-- strategy/  Pirelli plan, rules, our rollout, Hindsight
                                                            |-- eval/      many-race test, confidence intervals
                                                            '-- data/      real F1 numbers (FastF1)
 ```
@@ -93,6 +93,38 @@ http://127.0.0.1:8000/api/race?track=zandvoort&mode=endurance&seed=42&rain=0.8&s
 | `/api/proof?track&mode` | the many-race results (after `pitwall.eval.batch`) |
 | `/api/replay?track&driver` | our strategist inside a real 2023 race |
 
+## Results
+
+1000 random races per track (F1 rules), 500 for endurance and the fairness test. All four cars race the same weather, safety cars and lap noise. "Gain" is how many seconds earlier PitWall finished, with a 95% bootstrap confidence interval. Full numbers: `results/summary.json`, or the app's **Proof** tab.
+
+| Track (F1) | Gain vs pre-race plan | Won | Gain vs simple rules | Won |
+| --- | --- | --- | --- | --- |
+| Bahrain | +0.9 s (+0.6 to +1.3) | 59% | +14.7 s (+14.4 to +15.0) | 99% |
+| Monza | +1.3 s (+1.0 to +1.8) | 66% | −0.1 s (−0.3 to +0.1) | 19% |
+| Zandvoort | +12.1 s (+10.2 to +14.2) | 52% | +13.0 s (+12.2 to +13.7) | 91% |
+| Singapore | +14.4 s (+12.8 to +16.0) | 79% | +10.0 s (+9.1 to +10.9) | 81% |
+
+What this shows, honestly:
+- **The advantage comes mostly from changing conditions.** In wet races PitWall gains +29 to +44 s on the pre-race plan. In dry races the gain is small: +0.7 s at Bahrain, +0.2 s at Zandvoort (not significant).
+- **More rain, bigger advantage** (Zandvoort): from −0.2 s with no rain to +13.0 s at a 50% rain chance.
+- **Monza is a tie with the simple rules.** The data can't tell Monza's tyres apart, so there is little to optimise.
+- **Fairness test** (true numbers secretly different from what the strategists believe): the gain holds, +0.9 s at Bahrain and +12.7 s at Singapore.
+- **Endurance mode** (fuel decisions too): +3.8 s at Bahrain, +33.6 s at Singapore vs the pre-race plan.
+- At Singapore the assumed pre-race plan and the simple rules often make the same stops, so both baselines score alike there.
+
+**Real 2023 races.** PitWall replaced one midfield driver; we compare it with that driver's real pit stops run through the same simulator.
+
+| Race | Driver | Real finish | Real stops in our sim | PitWall |
+| --- | --- | --- | --- | --- |
+| Bahrain | ALB | P10 | P8 | **P4** |
+| Bahrain | BOT | P8 | P8 | **P4** |
+| Bahrain | STR | P6 | P6 | **P4** |
+| Monza | ALO | P9 | P7 | **P6** |
+| Monza | BOT / HAM | P10 / P6 | P10 / P6 | P10 / P6 |
+| Singapore | ALB / GAS / HUL | P11 / P6 / P13 | P6 / P6 / P9 | P6 / P6 / P9 |
+
+PitWall gained places at Bahrain and matched the real strategy elsewhere. The Singapore replay is less trustworthy: for ALB and HUL our simulator places the real strategy 4–5 places higher than reality.
+
 ## External resources
 
 - [React](https://react.dev), [Vite](https://vitejs.dev), [Recharts](https://recharts.org), [FastAPI](https://fastapi.tiangolo.com) and the [Barlow](https://fonts.google.com/specimen/Barlow) fonts (all open source).
@@ -114,4 +146,4 @@ http://127.0.0.1:8000/api/race?track=zandvoort&mode=endurance&seed=42&rain=0.8&s
 - The pre-race plans for Monza, Zandvoort and Singapore are assumed, not Pirelli's published 2023 plans.
 - In endurance mode, tank size and refuel speed are assumed (2009-era F1).
 - In the replay, the recorded cars can't react to ours, and the traffic rule is a simplification. Our simulator is 2–4 places optimistic, so we compare PitWall with the driver's real pit stops run through the same simulator. Zandvoort 2023 is not replayed: its red flag isn't modelled.
-- The Oracle is a strong reference, not a proven optimum.
+- Hindsight ("oracle" in the code and results) is a strong reference, not a proven optimum: it still decides lap by lap, so it can lose by a fraction of a second.
