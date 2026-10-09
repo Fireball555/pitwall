@@ -1,51 +1,42 @@
-"""STUB (BR0) — owner DAT replaces in DAT3/DAT9. Working now: follows data/pirelli/{track}.json."""
+"""The 'Pirelli plan' car (purple): follows the published pre-race plan. Owner: Smaran (BR).
+
+It ignores safety cars. It only reacts to rain late (wetness >= 0.5), like a cautious team,
+so it is a fair baseline rather than a straw man.
+"""
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-from pitwall.types import Action, CarState, Decision, Observation, TrackParams
-
-PIRELLI_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "pirelli"
+from pitwall.core import COMPOUNDS, DRY_IDS, INTER, STAY, CarState, Decision, Observation, TrackParams
+from pitwall.data.params import load_pirelli_plan
+from pitwall.strategy.rules import RULES, dry_choice, pit_to
 
 
 class PirelliStrategy:
-    """STUB (BR0) — owner DAT replaces in DAT3. Follows the pre-race plan, ignores safety cars."""
-
     name = "pirelli"
 
-    def __init__(self, track: str = "mock") -> None:
-        self.track = track
-        self._plan: dict | None = None
-        self._stop_idx = 0
+    def __init__(self, plan: dict | None = None):
+        self.plan = plan
 
-    def reset(self, belief: TrackParams, start: CarState) -> None:
-        path = PIRELLI_DIR / f"{self.track}.json"
-        if not path.exists():
-            path = PIRELLI_DIR / "mock.json"
-        self._plan = json.loads(path.read_text())
-        self._stop_idx = 0
+    def reset(self, belief: TrackParams, car: CarState) -> None:
+        self.P = belief
+        plan = self.plan or load_pirelli_plan(belief.name)
+        self.start = COMPOUNDS.index(plan["start"])
+        self.stops = {s["lap"]: COMPOUNDS.index(s["compound"]) for s in plan["stops"]}
 
     def decide(self, car: CarState, obs: Observation) -> Decision:
-        plan = self._plan or {}
+        P, left = self.P, obs.laps - obs.lap
         if obs.lap == 0:
-            start_compound = plan.get("start", "MEDIUM")
-            set_id = self._freshest(car, start_compound)
-            return Decision(action=Action(pit=True, set_id=set_id), reason=f"Pre-race plan: start on {start_compound}")
-
-        stops = plan.get("stops", [])
-        if self._stop_idx < len(stops) and obs.lap >= stops[self._stop_idx]["lap"]:
-            compound = stops[self._stop_idx]["compound"]
-            set_id = self._freshest(car, compound)
-            self._stop_idx += 1
-            if set_id is not None:
-                return Decision(action=Action(pit=True, set_id=set_id), reason=f"Lap {obs.lap}: plan says pit for {compound}")
-
-        return Decision(action=Action(pit=False), reason="Following the pre-race plan")
-
-    @staticmethod
-    def _freshest(car: CarState, compound: str) -> int | None:
-        candidates = [s for s in car.inventory if s.compound == compound]
-        if not candidates:
-            return None
-        return min(candidates, key=lambda s: s.age_laps).set_id
+            return pit_to(P, car, self.start, left, "Start (Pirelli plan)")
+        if left <= 1:
+            return Decision(STAY)
+        if obs.wetness >= 0.5 and car.cid in DRY_IDS:
+            return pit_to(P, car, INTER, left, f"Lap {obs.lap}: heavy rain, finally pitting")
+        if car.cid not in DRY_IDS and obs.wetness < RULES["slick_at"]:
+            return pit_to(P, car, dry_choice(left, car.used_dry, car.inventory), left, f"Lap {obs.lap}: back to slicks")
+        if obs.lap in self.stops:
+            return pit_to(P, car, self.stops[obs.lap], left, f"Lap {obs.lap}: planned stop")
+        if P.mode == "endurance" and car.fuel < P.fuel_burn * RULES["fuel_margin_laps"]:
+            return pit_to(P, car, car.cid, left, f"Lap {obs.lap}: low fuel")
+        if (P.mode == "f1" and not obs.race_was_wet and len(car.used_dry) < 2
+                and left <= RULES["two_compound_by"] and car.cid in DRY_IDS):
+            return pit_to(P, car, dry_choice(left, car.used_dry, car.inventory), left, f"Lap {obs.lap}: second compound required")
+        return Decision(STAY)

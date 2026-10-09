@@ -1,0 +1,43 @@
+{
+  "_source": "Bahrain: compounds from Pirelli's 2023 Bahrain GP Saturday preview (start soft, then hard, second stop hard); stop laps are ours. Monza, Zandvoort, Singapore: a typical one-stop medium-to-hard plan, ASSUMED (not yet checked against Pirelli's 2023 previews).",
+  "bahrain": {
+    "start": "SOFT",
+    "stops": [
+      {
+        "lap": 15,
+        "compound": "HARD"
+      },
+      {
+        "lap": 36,
+        "compound": "HARD"
+      }
+    ]
+  },
+  "monza": {
+    "start": "MEDIUM",
+    "stops": [
+      {
+        "lap": 22,
+        "compound": "HARD"
+      }
+    ]
+  },
+  "zandvoort": {
+    "start": "MEDIUM",
+    "stops": [
+      {
+        "lap": 28,
+        "compound": "HARD"
+      }
+    ]
+  },
+  "singapore": {
+    "start": "MEDIUM",
+    "stops": [
+      {
+        "lap": 24,
+        "compound": "HARD"
+      }
+    ]
+  }
+}
