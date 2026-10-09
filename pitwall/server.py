@@ -4,7 +4,9 @@
 
 Endpoints (all GET, JSON):
     /api/meta                          tracks, modes, cars, where each track's numbers come from
-    /api/race?track=&mode=&seed=&rain=&sc=&n=     run one race live (about 1-3 s)
+    /api/race?track=&mode=&seed=&rain=&sc=&n=&rain_at=&heavy=&dry_at=&sc_at=   run one race live;
+                                       rain_at / dry_at / sc_at: rain, dry or a safety car from that lap
+    /api/map?track=                    the circuit outline for the map
     /api/proof?track=&mode=            results of the many-race test (from results/)
     /api/replay/drivers?track=         drivers that can be replaced in a real race
     /api/replay?track=&driver=         our strategist inside a real race
@@ -69,38 +71,60 @@ def meta():
 
 
 @lru_cache(maxsize=64)
-def _race(track: str, mode: str, seed: int, rain: float | None, sc: float, n: int) -> dict:
+def _race(track: str, mode: str, seed: int, rain: float | None, sc: float, n: int,
+          rain_at: int | None = None, heavy: bool = False, sc_at: int | None = None,
+          dry_at: int | None = None) -> dict:
     P = load_track(track, mode)
-    scn = sample_scenario(P, seed, rain_prob=rain, sc_mult=sc)
+    scn = sample_scenario(P, seed, rain_prob=rain, sc_mult=sc, rain_start=rain_at,
+                          rain_peak=1.0 if heavy else 0.6, sc_start=sc_at, dry_start=dry_at)
     inv = sample_inventory(P, np.random.default_rng(seed + 1))
     log, finish = run_race(scn, make_cars(P, scn, n), P, inv)
     cars = {}
     for car, g in log.groupby("car"):
         g = g.sort_values("lap")
+        cid = np.array([COMPOUNDS.index(x) for x in g["compound"]])
         cars[car] = {
             "total": g["total"].tolist(), "lap_time": g["lap_time"].tolist(), "compound": g["compound"].tolist(),
             "tyre_age": g["tyre_age"].tolist(), "fuel": g["fuel"].tolist(), "fuel_added": g["fuel_added"].tolist(),
             "pitted": g["pitted"].tolist(),
+            # tyre condition: share of the set's useful life used, and seconds per lap lost to wear
+            "tyre_life": (g["tyre_age"] / P.cliff_lap[cid]).tolist(),
+            "tyre_loss": (P.deg[cid] * g["tyre_age"]
+                          + P.cliff_coef[cid] * np.maximum(0.0, g["tyre_age"] - P.cliff_lap[cid]) ** 2).tolist(),
             "decisions": [{"lap": int(r.lap), "reason": r.reason, "options": json.loads(r.options) if r.options else {}}
-                          for r in g.itertuples() if r.reason],
+                          for r in g.itertuples() if r.reason or r.options],
         }
     first = log[log["car"] == log["car"].iloc[0]].sort_values("lap")
     return clean({
         "track": track, "mode": mode, "seed": seed, "laps": P.laps, "tag": scn.tags[0],
         "status": [STATUS_NAMES[s] for s in first["status"]], "wetness": first["wetness"].tolist(),
+        # what the teams' weather radar says on each lap: chance of rain for the next 10 laps
+        "forecast": [scn.forecast[k, k:k + 10].tolist() for k in range(P.laps)],
         "finish": finish, "cars": cars,
     })
 
 
 @app.get("/api/race")
 def race(track: str = "bahrain", mode: str = "f1", seed: int = 7, rain: float | None = None,
-         sc: float = Query(1.0, ge=0, le=5), n: int = Query(100, ge=20, le=400)):
+         sc: float = Query(1.0, ge=0, le=5), n: int = Query(100, ge=20, le=400),
+         rain_at: int | None = Query(None, ge=1), heavy: bool = False, sc_at: int | None = Query(None, ge=1),
+         dry_at: int | None = Query(None, ge=1)):
     check_track(track)
     if mode not in ("f1", "endurance"):
         raise HTTPException(400, "mode must be 'f1' or 'endurance'")
     if rain is not None and not 0 <= rain <= 1:
         raise HTTPException(400, "rain must be between 0 and 1")
-    return _race(track, mode, int(seed), rain, float(sc), int(n))
+    return _race(track, mode, int(seed), rain, float(sc), int(n), rain_at, heavy, sc_at, dry_at)
+
+
+@app.get("/api/map")
+def track_map(track: str = "bahrain"):
+    """The circuit outline (400 points, starting at the timing line). Missing -> the app draws an oval."""
+    check_track(track)
+    f = DATA_DIR / "maps" / f"{track}.json"
+    if not f.exists():
+        raise HTTPException(404, f"No map for {track} yet. Run: python -m pitwall.data.trackmap")
+    return json.loads(f.read_text())
 
 
 @app.get("/api/proof")

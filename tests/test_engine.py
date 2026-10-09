@@ -72,3 +72,24 @@ def test_endurance_mode_refuels_and_finishes():
     scn = sample_scenario(Pe, 2)
     log, finish = run_race(scn, [RulesStrategy()], Pe, sample_inventory(Pe, np.random.default_rng(2)))
     assert finish["rules"] == finish["rules"] and log["fuel_added"].sum() > 0
+
+
+def test_forced_rain_is_a_surprise_for_the_fair_strategists():
+    """'Rain now' at lap L must not change anything PitWall saw or did before lap L."""
+    import numpy as np
+
+    from pitwall.data.params import load_track
+    from pitwall.engine.inventory import sample_inventory
+    from pitwall.engine.race import run_race
+    from pitwall.engine.scenario import sample_scenario
+    from pitwall.strategy.rollout import RolloutStrategy
+
+    P = load_track("bahrain")
+    a = sample_scenario(P, 3, rain_prob=0.0)
+    b = sample_scenario(P, 3, rain_prob=0.0, rain_start=20, rain_peak=1.0)
+    assert np.allclose(a.forecast[:20], b.forecast[:20]) and b.wetness[21] > 0.2
+    inv = sample_inventory(P, np.random.default_rng(3))
+    la, _ = run_race(a, [RolloutStrategy(n=50, seed=1)], P, inv)
+    lb, _ = run_race(b, [RolloutStrategy(n=50, seed=1)], P, inv)
+    cols = ["lap", "compound", "pitted"]
+    assert la[la["lap"] <= 20][cols].equals(lb[lb["lap"] <= 20][cols])

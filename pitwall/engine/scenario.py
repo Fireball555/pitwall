@@ -73,13 +73,53 @@ def _forecast(P: TrackParams, wet: np.ndarray, rng: np.random.Generator) -> np.n
     return fc
 
 
-def sample_scenario(P: TrackParams, seed: int, rain_prob: float | None = None, sc_mult: float = 1.0) -> Scenario:
-    """One reproducible race world (same seed -> same race)."""
+def _forced_rain(laps: int, start: int, peak: float, seed: int) -> np.ndarray:
+    """Rain that starts exactly at lap index `start` (for the app's "rain now" button)."""
+    hold = int(np.random.default_rng(seed + 7).integers(10, 21))
+    wet, level = np.zeros(laps), 0.0
+    for k in range(start, laps):
+        level = min(peak, level + 2 * RAIN_RISE) if k < start + hold else max(0.0, level - RAIN_DRY)
+        wet[k] = level
+    return wet
+
+
+def _forced_dry(wet: np.ndarray, start: int) -> np.ndarray:
+    """Rain stops at lap index `start`; the track then dries over a few laps."""
+    out, level = wet.copy(), (wet[start - 1] if start > 0 else 0.0)
+    for k in range(start, len(wet)):
+        level = max(0.0, level - 2 * RAIN_DRY)
+        out[k] = level
+    return out
+
+
+def sample_scenario(P: TrackParams, seed: int, rain_prob: float | None = None, sc_mult: float = 1.0,
+                    rain_start: int | None = None, rain_peak: float = 0.6, sc_start: int | None = None,
+                    dry_start: int | None = None) -> Scenario:
+    """One reproducible race world (same seed -> same race).
+
+    rain_start / dry_start / sc_start (lap index) are the app's "rain now", "dry now" and "safety car
+    now" buttons. They are surprises: the weather radar only shows them from that lap on, so nothing
+    the fair strategists saw before the button was pressed changes. Everything else stays the same."""
     rng = np.random.default_rng(seed)
     status = _safety_cars(P, P.laps, rng, sc_mult)
     wet = _rain(P, P.laps, rng, P.p_rain if rain_prob is None else rain_prob)
     noise = rng.normal(0.0, P.noise_sd, P.laps)
+    planned = wet
+    if rain_start is not None:
+        wet = np.maximum(np.where(np.arange(P.laps) < rain_start, wet, 0.0),
+                         _forced_rain(P.laps, max(1, rain_start), rain_peak, seed))
+    if dry_start is not None and 1 <= dry_start < P.laps:
+        wet = _forced_dry(wet, dry_start)
+    if sc_start is not None and 1 <= sc_start < P.laps - 1:
+        status = status.copy()
+        status[sc_start:sc_start + 4] = SC
+    fc_rng = np.random.Generator(np.random.PCG64())
+    fc_rng.bit_generator.state = rng.bit_generator.state   # same radar noise for both versions
     fc = _forecast(P, wet, rng)
+    first_change = min([k for k in (rain_start, dry_start) if k is not None], default=None)
+    if first_change is not None:
+        before = _forecast(P, planned, fc_rng)             # what the radar showed before the surprise
+        fc[:first_change] = before[:first_change]
     n_events = int(np.sum(np.diff(np.concatenate([[GREEN], status])) != 0) // 2 + (status[-1] != GREEN))
     tags = ("wet",) if wet.max() > 0.2 else (("chaotic",) if n_events >= 2 else ("dry",))
     return Scenario(P.name, seed, P.laps, status, wet, noise, fc, tags)
