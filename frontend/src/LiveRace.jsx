@@ -9,6 +9,15 @@ const FLAG = { GREEN: "Green flag", SC: "Safety car", VSC: "Virtual safety car" 
 const WEATHER = { dry: { label: "Dry", rain: 0 }, usual: { label: "Usual", rain: null }, wet: { label: "Wet race", rain: 1 } };
 const SAFETY = { none: { label: "None", sc: 0 }, usual: { label: "Usual", sc: 1 }, lots: { label: "Lots", sc: 3 } };
 const newSeed = () => Math.floor(Math.random() * 99999);
+// Rehearsed races (checked: same race number = exactly the same race on any machine).
+const DEMOS = [
+  { name: "Bahrain: safety cars", track: "bahrain", mode: "f1", weather: "usual", safety: "usual", seed: 5 },
+  { name: "Bahrain: rain arrives", track: "bahrain", mode: "f1", weather: "wet", safety: "usual", seed: 8 },
+  { name: "Zandvoort: dry race", track: "zandvoort", mode: "f1", weather: "usual", safety: "usual", seed: 3 },
+  { name: "Zandvoort: rain and chaos", track: "zandvoort", mode: "f1", weather: "wet", safety: "usual", seed: 5 },
+  { name: "Singapore: safety cars", track: "singapore", mode: "f1", weather: "usual", safety: "usual", seed: 9 },
+  { name: "Bahrain: endurance, fuel calls", track: "bahrain", mode: "endurance", weather: "usual", safety: "usual", seed: 2 },
+];
 
 export default function LiveRace() {
   const [form, setForm] = useState({ track: "bahrain", mode: "f1", weather: "usual", safety: "usual", seed: 7 });
@@ -30,6 +39,7 @@ export default function LiveRace() {
   // any setting change starts that race straight away
   const change = (k, v) => { const f = { ...form, [k]: v }; setForm(f); setEvents({}); run(f, {}); };
   const newRace = () => change("seed", newSeed());
+  const pickDemo = (k) => { const { name, ...f } = DEMOS[k]; setForm(f); setEvents({}); run(f, {}); };
   const clock = useRaceClock(data?.laps ?? 1, runId, resume.current);
   // "rain now" / "safety car now": rerun the same race with the event from the next lap, carry on watching
   const force = (ev) => {
@@ -42,7 +52,7 @@ export default function LiveRace() {
 
   return (
     <div className="live2">
-      <Setup form={form} change={change} busy={busy} newRace={newRace} />
+      <Setup form={form} change={change} busy={busy} newRace={newRace} pickDemo={pickDemo} />
       {err && <p className="error">{err}</p>}
       {busy && !data && <p className="help">Our strategist is imagining 100 futures for every option, every lap…</p>}
       {data && <Stage data={data} clock={clock} busy={busy} force={force} />}
@@ -63,9 +73,31 @@ function Seg({ label, value, options, onChange }) {
   );
 }
 
-function Setup({ form, change, busy, newRace }) {
+// Type a race number, then Enter (or click away) to run it.
+function RaceNo({ seed, onSet }) {
+  const [v, setV] = useState(String(seed));
+  useEffect(() => setV(String(seed)), [seed]);
+  const commit = () => { const n = parseInt(v, 10); if (Number.isFinite(n) && n !== seed) onSet(Math.max(0, n)); else setV(String(seed)); };
+  return (
+    <div className="field race-no">
+      <span className="field-label">Race #</span>
+      <input type="number" min={0} max={99999} value={v} aria-label="Race number"
+        onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} />
+    </div>
+  );
+}
+
+function Setup({ form, change, busy, newRace, pickDemo }) {
+  const demo = DEMOS.findIndex((d) => ["track", "mode", "weather", "safety", "seed"].every((k) => d[k] === form[k]));
   return (
     <div className="setup">
+      <div className="field">
+        <span className="field-label">Demo race</span>
+        <select value={demo} onChange={(e) => pickDemo(+e.target.value)} aria-label="Demo race">
+          <option value={-1} disabled>Choose…</option>
+          {DEMOS.map((d, k) => <option key={k} value={k}>{d.name}</option>)}
+        </select>
+      </div>
       <div className="field">
         <span className="field-label">Track</span>
         <select value={form.track} onChange={(e) => change("track", e.target.value)} aria-label="Track">
@@ -75,6 +107,7 @@ function Setup({ form, change, busy, newRace }) {
       <Seg label="Rules" value={form.mode} options={{ f1: "F1", endurance: "Endurance" }} onChange={(v) => change("mode", v)} />
       <Seg label="Weather" value={form.weather} options={WEATHER} onChange={(v) => change("weather", v)} />
       <Seg label="Safety cars" value={form.safety} options={SAFETY} onChange={(v) => change("safety", v)} />
+      <RaceNo seed={form.seed} onSet={(v) => change("seed", v)} />
       <button className="btn primary new-race" disabled={busy} onClick={newRace}>{busy ? "Simulating…" : "New race"}</button>
     </div>
   );

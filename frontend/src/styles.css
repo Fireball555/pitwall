@@ -66,6 +66,7 @@ select, input[type="number"] { background: #0b1a2c; border: 1px solid var(--line
 .field-label { color: var(--muted); font-size: 0.85rem; }
 .setup select { min-width: 150px; padding: 8px 10px; }
 .new-race { margin-left: auto; }
+.race-no input { width: 90px; padding: 8px 10px; }
 .seg2 { display: flex; background: #0b1a2c; border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
 .seg2 button { background: none; border: 0; padding: 6px 12px; border-radius: 6px; cursor: pointer; color: var(--muted); white-space: nowrap; }
 .seg2 button:hover { color: var(--text); }
