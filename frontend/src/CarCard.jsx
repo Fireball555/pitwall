@@ -7,7 +7,7 @@ const WHAT = {
   rollout: "Imagines 100 futures, every lap",
   oracle: "PitWall's thinking, but knows the future",
 };
-const strip = (r) => r.replace(/^Lap \d+:\s*/, "").replace(" ± 0.0", "");
+export const strip = (r) => r.replace(/^Lap \d+:\s*/, "").replace(" ± 0.0", "").replace(/ \+ (\d+) kg \([^)]*\)/, " + $1 kg");
 
 // One car's dashboard: place, gap, tyre, fuel, and the last call it made.
 export default function CarCard({ car, data, lap, pos, gap }) {
@@ -20,7 +20,6 @@ export default function CarCard({ car, data, lap, pos, gap }) {
   const last = calls[calls.length - 1];
   const now = c.decisions.find((d) => d.lap === lap);
   const isOurs = car === "rollout";
-  const fuelMax = data.mode === "endurance" ? Math.max(...c.fuel) : 0;
 
   return (
     <article className={`card ${isOurs ? "ours" : ""} ${pitted && lap > 1 ? "pitting" : ""}`} style={{ "--car": CARS[car].colour }}>
@@ -40,12 +39,7 @@ export default function CarCard({ car, data, lap, pos, gap }) {
 
       <TyreHealth life={c.tyre_life[i]} loss={c.tyre_loss[i]} wetTyre={compound === "INTER" || compound === "WET"} />
 
-      {data.mode === "endurance" && (
-        <div className="fuel" aria-label={`Fuel ${Math.round(c.fuel[i])} kg`}>
-          <span style={{ width: `${(100 * Math.max(0, c.fuel[i])) / fuelMax}%` }} />
-          <small>{Math.round(c.fuel[i])} kg fuel</small>
-        </div>
-      )}
+      {data.tank && <FuelGauge fuel={c.fuel[i]} tank={data.tank} burn={data.fuel_burn} added={pitted && lap > 1 ? c.fuel_added[i] : 0} />}
 
       <div className="call" key={last?.lap ?? 0}>
         {pitted && lap > 1 && <span className="pit-flag">PIT</span>}
@@ -55,13 +49,17 @@ export default function CarCard({ car, data, lap, pos, gap }) {
         <small>{stops} stop{stops === 1 ? "" : "s"}</small>
       </div>
 
-      {isOurs && <Thinking d={now} />}
+      {isOurs && <Thinking d={now} max={3} />}
     </article>
   );
 }
 
 // What PitWall weighed this lap: each option's average finish, relative to the best one.
-function Thinking({ d }) {
+// "pit HARD + 17 kg (half tank)" -> "Pit HARD · 17 kg"
+export const optionLabel = (k) => k.replace(/^pit /, "Pit ").replace(/^stay out$/, "Stay out").replace(/^start /, "Start ")
+  .replace(/ \+ (\d+) kg \([^)]*\)/, " · $1 kg");
+
+export function Thinking({ d, max = 4 }) {
   const opts = d?.options ? Object.entries(d.options).sort((a, b) => a[1] - b[1]) : [];
   if (opts.length < 2) return <p className="think-idle">Fresh tyres, green flag: nothing worth weighing this lap.</p>;
   const best = opts[0][1];
@@ -69,9 +67,9 @@ function Thinking({ d }) {
   return (
     <div className="think">
       <p className="think-title">This lap it compared</p>
-      {opts.slice(0, 4).map(([k, v], n) => (
+      {opts.slice(0, max).map(([k, v], n) => (
         <div className={`think-row ${n === 0 ? "best" : ""}`} key={k}>
-          <span className="think-label">{k}</span>
+          <span className="think-label" title={k}>{optionLabel(k)}</span>
           <span className="think-bar"><span style={{ width: `${n === 0 ? 100 : Math.max(4, 100 - (100 * (v - best)) / spread)}%` }} /></span>
           <span className="think-val">{n === 0 ? "best" : `+${(v - best).toFixed(1)} s`}</span>
         </div>
@@ -91,6 +89,21 @@ function TyreHealth({ life, loss, wetTyre }) {
         <span className={tone}>{life >= 1 ? "Past its best" : `${pct}% used`}{!wetTyre && loss > 0.05 ? ` · ${loss.toFixed(1)} s/lap slower` : ""}</span>
       </div>
       <div className={`health-bar ${tone}`}><span style={{ width: `${Math.min(100, pct)}%` }} /></div>
+    </div>
+  );
+}
+
+// Endurance: fuel left as a share of the tank, and how many laps it lasts.
+function FuelGauge({ fuel, tank, burn, added }) {
+  const lapsLeft = Math.max(0, fuel) / burn;
+  const tone = lapsLeft < 2 ? "bad" : lapsLeft < 5 ? "warn" : "ok";
+  return (
+    <div className="health" title="Fuel on board, and how many laps it lasts at this burn rate">
+      <div className="health-top">
+        <span>Fuel{added > 0.5 ? <b className="refuel"> +{Math.round(added)} kg</b> : null}</span>
+        <span className={tone}>{Math.round(Math.max(0, fuel))} kg · {lapsLeft < 10 ? lapsLeft.toFixed(1) : Math.round(lapsLeft)} laps</span>
+      </div>
+      <div className={`health-bar fuel-bar ${tone}`}><span style={{ width: `${Math.min(100, (100 * Math.max(0, fuel)) / tank)}%` }} /></div>
     </div>
   );
 }

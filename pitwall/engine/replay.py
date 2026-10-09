@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from pitwall.core import COMPOUNDS, INTER, SC, STAY, WET, Action, CarState, Decision, TyreSet
+from pitwall.core import COMPOUNDS, INTER, SC, STATUS_NAMES, STAY, WET, Action, CarState, Decision, TyreSet
 from pitwall.data.params import load_track
 from pitwall.data.realrace import compound_id, load_real
 from pitwall.engine.race import observe, step
@@ -129,7 +129,8 @@ def replay(track: str, driver: str, strategy, save: bool = True) -> dict:
             order = sorted(list(row.items()) + [("OURS", E)], key=lambda kv: kv[1])
             order_rows.append({"lap": L, "order": [k for k, _ in order], "elapsed": {k: round(v, 3) for k, v in order}})
         ours_rows.append({"lap": L, "compound": rec["compound"], "tyre_age": rec["tyre_age"],
-                          "pitted": bool(rec["pitted"]), "reason": dec.reason})
+                          "pitted": bool(rec["pitted"]), "reason": dec.reason,
+                          "options": {k: round(float(v), 2) for k, v in (dec.options or {}).items()}})
     final_order = order_rows[-1]["order"] if order_rows else []
     out = {
         "track": track, "driver": driver, "is_real_data": is_real, "laps_total": laps,
@@ -141,13 +142,37 @@ def replay(track: str, driver: str, strategy, save: bool = True) -> dict:
                          "position": int(r.position) if r.position == r.position else None} for r in me.itertuples()],
         "strategy": getattr(strategy, "name", "?"),
     }
+    out.update(race_extras(df, driver, scn))
     if save:
         RESULTS.mkdir(exist_ok=True)
         (RESULTS / f"replay_{track}_{driver}_{out['strategy']}.json").write_text(json.dumps(out))
     return out
 
 
-def replay_with_sanity(track: str, driver: str, n_futures: int = 200) -> dict:
+def race_extras(df: pd.DataFrame, driver: str, scn: Scenario | None = None) -> dict:
+    """What the app needs to draw the real race: flags, weather, the grid, every car's tyres and
+    stops, the replaced driver's real progress (the "ghost") and a typical lap time per lap."""
+    laps = int(df["lap"].max())
+    lead = df.sort_values(["lap", "position"]).groupby("lap").first()
+    status = lead["status"].reindex(range(1, laps + 1)).fillna(0).astype(int).tolist()
+    on_rain = df.assign(r=df["compound"].isin(["INTER", "WET"])).groupby("lap")["r"].mean()
+    wet = on_rain.reindex(range(1, laps + 1)).fillna(0).clip(0, 1).round(3).tolist()
+    grid = df.groupby("driver")["grid"].first()
+    tyres = df.pivot(index="lap", columns="driver", values="compound").reindex(range(1, laps + 1))
+    pits = df[df["pit_out"] & (df["lap"] > 1)].groupby("driver")["lap"].apply(lambda x: sorted(int(v) for v in x))
+    me = df[df["driver"] == driver].set_index("lap")["elapsed"].reindex(range(1, laps + 1))
+    lap_ref = df[(~df["pit_in"]) & (~df["pit_out"])].groupby("lap")["lap_time"].median().reindex(range(1, laps + 1))
+    return {
+        "status": [STATUS_NAMES[s] for s in status], "wetness": wet,
+        "grid": {d: int(g) for d, g in grid.items() if g == g and g > 0} | {"OURS": int(grid.get(driver, 0) or 0)},
+        "tyres": {d: [c if isinstance(c, str) else None for c in tyres[d].tolist()] for d in tyres.columns if d != driver},
+        "pits": {d: v for d, v in pits.items() if d != driver},
+        "ghost": [None if v != v else round(float(v), 3) for v in me.tolist()],
+        "lap_ref": [None if v != v else round(float(v), 3) for v in lap_ref.interpolate().bfill().tolist()],
+    }
+
+
+def replay_with_sanity(track: str, driver: str, n_futures: int = 100) -> dict:
     """Our strategist + the real-strategy sanity check, saved together for the app."""
     from pitwall.strategy.rollout import RolloutStrategy
     df, _ = load_real(track)

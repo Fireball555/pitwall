@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api.js";
 import CarCard from "./CarCard.jsx";
 import { CARS, ORDER, TRACK_NAMES } from "./theme.js";
+import Timeline from "./Timeline.jsx";
 import TrackMap from "./TrackMap.jsx";
 import { useRaceClock } from "./useRaceClock.js";
 
@@ -9,6 +10,15 @@ const FLAG = { GREEN: "Green flag", SC: "Safety car", VSC: "Virtual safety car" 
 const WEATHER = { dry: { label: "Dry", rain: 0 }, usual: { label: "Usual", rain: null }, wet: { label: "Wet race", rain: 1 } };
 const SAFETY = { none: { label: "None", sc: 0 }, usual: { label: "Usual", sc: 1 }, lots: { label: "Lots", sc: 3 } };
 const newSeed = () => Math.floor(Math.random() * 99999);
+// Rehearsed races (checked: same race number = exactly the same race on any machine).
+const DEMOS = [
+  { name: "Bahrain: safety cars", track: "bahrain", mode: "f1", weather: "usual", safety: "usual", seed: 5 },
+  { name: "Bahrain: rain arrives", track: "bahrain", mode: "f1", weather: "wet", safety: "usual", seed: 8 },
+  { name: "Zandvoort: dry race", track: "zandvoort", mode: "f1", weather: "usual", safety: "usual", seed: 3 },
+  { name: "Zandvoort: rain and chaos", track: "zandvoort", mode: "f1", weather: "wet", safety: "usual", seed: 5 },
+  { name: "Singapore: safety cars", track: "singapore", mode: "f1", weather: "usual", safety: "usual", seed: 9 },
+  { name: "Bahrain: endurance, fuel calls", track: "bahrain", mode: "endurance", weather: "usual", safety: "usual", seed: 2 },
+];
 
 export default function LiveRace() {
   const [form, setForm] = useState({ track: "bahrain", mode: "f1", weather: "usual", safety: "usual", seed: 7 });
@@ -30,6 +40,7 @@ export default function LiveRace() {
   // any setting change starts that race straight away
   const change = (k, v) => { const f = { ...form, [k]: v }; setForm(f); setEvents({}); run(f, {}); };
   const newRace = () => change("seed", newSeed());
+  const pickDemo = (k) => { const { name, ...f } = DEMOS[k]; setForm(f); setEvents({}); run(f, {}); };
   const clock = useRaceClock(data?.laps ?? 1, runId, resume.current);
   // "rain now" / "safety car now": rerun the same race with the event from the next lap, carry on watching
   const force = (ev) => {
@@ -42,7 +53,7 @@ export default function LiveRace() {
 
   return (
     <div className="live2">
-      <Setup form={form} change={change} busy={busy} newRace={newRace} />
+      <Setup form={form} change={change} busy={busy} newRace={newRace} pickDemo={pickDemo} />
       {err && <p className="error">{err}</p>}
       {busy && !data && <p className="help">Our strategist is imagining 100 futures for every option, every lap…</p>}
       {data && <Stage data={data} clock={clock} busy={busy} force={force} />}
@@ -63,9 +74,31 @@ function Seg({ label, value, options, onChange }) {
   );
 }
 
-function Setup({ form, change, busy, newRace }) {
+// Type a race number, then Enter (or click away) to run it.
+function RaceNo({ seed, onSet }) {
+  const [v, setV] = useState(String(seed));
+  useEffect(() => setV(String(seed)), [seed]);
+  const commit = () => { const n = parseInt(v, 10); if (Number.isFinite(n) && n !== seed) onSet(Math.max(0, n)); else setV(String(seed)); };
+  return (
+    <div className="field race-no">
+      <span className="field-label">Race #</span>
+      <input type="number" min={0} max={99999} value={v} aria-label="Race number"
+        onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} />
+    </div>
+  );
+}
+
+function Setup({ form, change, busy, newRace, pickDemo }) {
+  const demo = DEMOS.findIndex((d) => ["track", "mode", "weather", "safety", "seed"].every((k) => d[k] === form[k]));
   return (
     <div className="setup">
+      <div className="field">
+        <span className="field-label">Demo race</span>
+        <select value={demo} onChange={(e) => pickDemo(+e.target.value)} aria-label="Demo race">
+          <option value={-1} disabled>Choose…</option>
+          {DEMOS.map((d, k) => <option key={k} value={k}>{d.name}</option>)}
+        </select>
+      </div>
       <div className="field">
         <span className="field-label">Track</span>
         <select value={form.track} onChange={(e) => change("track", e.target.value)} aria-label="Track">
@@ -75,6 +108,7 @@ function Setup({ form, change, busy, newRace }) {
       <Seg label="Rules" value={form.mode} options={{ f1: "F1", endurance: "Endurance" }} onChange={(v) => change("mode", v)} />
       <Seg label="Weather" value={form.weather} options={WEATHER} onChange={(v) => change("weather", v)} />
       <Seg label="Safety cars" value={form.safety} options={SAFETY} onChange={(v) => change("safety", v)} />
+      <RaceNo seed={form.seed} onSet={(v) => change("seed", v)} />
       <button className="btn primary new-race" disabled={busy} onClick={newRace}>{busy ? "Simulating…" : "New race"}</button>
     </div>
   );
@@ -98,7 +132,7 @@ function Stage({ data, clock, busy, force }) {
   return (
     <>
       <div className={`stage ${busy ? "stale" : ""}`}>
-        <div className="side">{card("rollout")}{card("pirelli")}</div>
+        <div className="side left">{card("rollout")}{card("pirelli")}</div>
         <div className="center">
           <div className="lap-head">
             <div className="lap-big">Lap <b>{lap}</b><small>/{data.laps}</small></div>
@@ -120,7 +154,8 @@ function Stage({ data, clock, busy, force }) {
         </div>
         <div className="side">{card("rules")}{card("oracle")}</div>
       </div>
-      <Timeline data={data} clock={clock} />
+      <Timeline laps={data.laps} status={data.status} wetness={data.wetness} clock={clock}
+        stops={[{ laps: data.cars.rollout.pitted.map((p, k) => (p && k > 0 ? k + 1 : null)).filter(Boolean), colour: CARS.rollout.colour, label: "PitWall stop" }]} />
     </>
   );
 }
@@ -156,34 +191,5 @@ function Verdict({ data }) {
     <p className="verdict2">
       {g >= 0 ? <>PitWall beat the Pirelli plan by <b>{g.toFixed(1)} s</b></> : <>The Pirelli plan beat PitWall by <b>{(-g).toFixed(1)} s</b> this time</>}
     </p>
-  );
-}
-
-// Play/pause, speed, and a lap scrubber that shows safety cars, rain and PitWall's stops.
-function Timeline({ data, clock }) {
-  const n = data.laps;
-  const marks = [];
-  data.status.forEach((s, k) => { if (s !== "GREEN") marks.push({ k, cls: s.toLowerCase() }); });
-  data.wetness.forEach((w, k) => { if (w > 0.2) marks.push({ k, cls: "rain" }); });
-  const stops = data.cars.rollout.pitted.map((p, k) => (p && k > 0 ? k : null)).filter((k) => k != null);
-  return (
-    <div className="timeline">
-      {clock.playing
-        ? <button className="btn" onClick={clock.pause}>Pause</button>
-        : <button className="btn primary" onClick={clock.play}>{clock.finished ? "Watch again" : "Play"}</button>}
-      <div className="scrub">
-        <div className="scrub-bands" aria-hidden="true">
-          {marks.map((m, k) => <span key={k} className={m.cls} style={{ left: `${(100 * m.k) / n}%`, width: `${100 / n}%` }} />)}
-          {stops.map((k) => <i key={k} style={{ left: `${(100 * (k + 0.5)) / n}%`, background: CARS.rollout.colour }} />)}
-        </div>
-        <input type="range" min={1} max={n} step={1} value={clock.lap} aria-label="Lap"
-          onChange={(e) => clock.seek(+e.target.value)} />
-      </div>
-      <div className="seg2" role="group" aria-label="Speed">
-        {[1, 2, 5].map((s) => (
-          <button key={s} className={clock.secPerLap === s ? "on" : ""} aria-pressed={clock.secPerLap === s} onClick={() => clock.setSecPerLap(s)}>{s} s/lap</button>
-        ))}
-      </div>
-    </div>
   );
 }

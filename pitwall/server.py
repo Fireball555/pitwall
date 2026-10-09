@@ -30,7 +30,7 @@ from pitwall.data.params import DATA_DIR, TRACKS, load_track
 from pitwall.data.realrace import load_real
 from pitwall.engine.inventory import sample_inventory
 from pitwall.engine.race import run_race
-from pitwall.engine.replay import midfield_drivers, replay_with_sanity
+from pitwall.engine.replay import midfield_drivers, race_extras, replay_with_sanity
 from pitwall.engine.scenario import sample_scenario
 from pitwall.eval.metrics import RESULTS, paired, summarise
 from pitwall.strategy.registry import make_cars
@@ -101,6 +101,7 @@ def _race(track: str, mode: str, seed: int, rain: float | None, sc: float, n: in
         # what the teams' weather radar says on each lap: chance of rain for the next 10 laps
         "forecast": [scn.forecast[k, k:k + 10].tolist() for k in range(P.laps)],
         "finish": finish, "cars": cars,
+        "tank": float(P.tank) if P.mode == "endurance" else None, "fuel_burn": float(P.fuel_burn),
     })
 
 
@@ -136,7 +137,10 @@ def proof(track: str = "bahrain", mode: str = "f1"):
     summary = summarise()
     w = paired(pd.read_parquet(f))
     gains = (w["pirelli"] - w["rollout"]).dropna()
-    hist, edges = np.histogram(gains, bins=min(40, max(10, len(gains) // 10)))
+    # a few very wet races gain 100 s+: clip to the 1st-99th percentile so the shape stays readable
+    lo, hi = (np.percentile(gains, [1, 99]) if len(gains) else (0, 1))
+    lo, hi = min(lo, -1.0), max(hi, 1.0)
+    hist, edges = np.histogram(gains.clip(lo, hi), bins=30, range=(lo, hi))
     return clean({
         "available": True, "track": track, "mode": mode,
         "main": summary.get("main", {}).get(mode, {}).get(track),
@@ -146,6 +150,19 @@ def proof(track: str = "bahrain", mode: str = "f1"):
         "losses": int((gains < 0).sum()), "races": int(len(gains)), "worst": float(gains.min()) if len(gains) else None,
         "accuracy": json.loads((DATA_DIR / "accuracy.json").read_text()) if (DATA_DIR / "accuracy.json").exists() else None,
     })
+
+
+@app.get("/api/summary")
+def summary_all(mode: str = "f1"):
+    """Headline numbers for every track (for the Proof scoreboard)."""
+    main = summarise().get("main", {}).get(mode, {})
+    out = []
+    for t in TRACKS:
+        m = main.get(t)
+        if m:
+            out.append({"track": t, "n": m["n_races"], "gain_pirelli": m["gain_vs"]["pirelli"], "gain_rules": m["gain_vs"]["rules"],
+                        "win_pirelli": m["win_rate_vs"]["pirelli"], "win_rules": m["win_rate_vs"]["rules"]})
+    return clean({"mode": mode, "tracks": out})
 
 
 NO_REPLAY = {"zandvoort": "Zandvoort 2023 had a 40-minute red flag, which our simulator doesn't model, so it can't be replayed fairly."}
@@ -161,7 +178,10 @@ def check_replay(track: str) -> None:
 def replay_drivers(track: str = "bahrain"):
     check_replay(track)
     df, is_real = load_real(track)
-    return {"track": track, "is_real": is_real, "drivers": midfield_drivers(track) or sorted(df["driver"].unique())}
+    codes = midfield_drivers(track) or sorted(df["driver"].unique())
+    grid = df.groupby("driver")["grid"].first()
+    return {"track": track, "is_real": is_real, "drivers": codes,
+            "grid": {d: int(grid[d]) for d in codes if d in grid and grid[d] == grid[d]}}
 
 
 @app.get("/api/replay")
@@ -169,6 +189,8 @@ def replay(track: str = "bahrain", driver: str = "ALB"):
     check_replay(track)
     f = RESULTS / f"replay_{track}_{driver}.json"
     rep = json.loads(f.read_text()) if f.exists() else replay_with_sanity(track, driver)
+    if "ghost" not in rep:  # saved by an older version: add the drawing data from the race file
+        rep.update(race_extras(load_real(track)[0], driver))
     return clean(rep)
 
 

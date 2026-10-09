@@ -99,18 +99,20 @@ http://127.0.0.1:8000/api/race?track=zandvoort&mode=endurance&seed=42&rain=0.8&s
 
 | Track (F1) | Gain vs pre-race plan | Won | Gain vs simple rules | Won |
 | --- | --- | --- | --- | --- |
-| Bahrain | +0.9 s (+0.6 to +1.3) | 59% | +14.7 s (+14.4 to +15.0) | 99% |
-| Monza | +1.3 s (+1.0 to +1.8) | 66% | −0.1 s (−0.3 to +0.1) | 19% |
-| Zandvoort | +12.1 s (+10.2 to +14.2) | 52% | +13.0 s (+12.2 to +13.7) | 91% |
-| Singapore | +14.4 s (+12.8 to +16.0) | 79% | +10.0 s (+9.1 to +10.9) | 81% |
+| Bahrain | +0.8 s (+0.5 to +1.2) | 59% | +14.7 s (+14.4 to +15.0) | 99% |
+| Monza | +1.1 s (+0.8 to +1.5) | 65% | −0.1 s (−0.3 to +0.1) | 19% |
+| Zandvoort | +9.0 s (+7.3 to +10.9) | 49% | +13.0 s (+12.2 to +13.7) | 91% |
+| Singapore | +10.6 s (+9.3 to +11.8) | 77% | +10.0 s (+9.1 to +10.9) | 81% |
 
 What this shows, honestly:
-- **The advantage comes mostly from changing conditions.** In wet races PitWall gains +29 to +44 s on the pre-race plan. In dry races the gain is small: +0.7 s at Bahrain, +0.2 s at Zandvoort (not significant).
-- **More rain, bigger advantage** (Zandvoort): from −0.2 s with no rain to +13.0 s at a 50% rain chance.
+- **The advantage comes mostly from changing conditions.** In wet races PitWall gains +16 to +35 s on the pre-race plan. In dry races the gain is small: +0.7 s at Bahrain, +0.2 s at Zandvoort (not significant). At Zandvoort it wins fewer than half the races, but wins big when it rains.
+- **More rain, bigger advantage** (Zandvoort): from −0.2 s with no rain to +10.2 s at a 50% rain chance.
 - **Monza is a tie with the simple rules.** The data can't tell Monza's tyres apart, so there is little to optimise.
-- **Fairness test** (true numbers secretly different from what the strategists believe): the gain holds, +0.9 s at Bahrain and +12.7 s at Singapore.
-- **Endurance mode** (fuel decisions too): +3.8 s at Bahrain, +33.6 s at Singapore vs the pre-race plan.
+- **Fairness test** (true numbers secretly different from what the strategists believe): the gain holds, +0.9 s at Bahrain and +8.8 s at Singapore.
+- **Endurance mode** (fuel decisions too): +3.8 s at Bahrain, +29.1 s at Singapore vs the pre-race plan.
+- The pre-race plan never fits slicks on a wet track (it waits for the track to dry), so it is a fair baseline.
 - At Singapore the assumed pre-race plan and the simple rules often make the same stops, so both baselines score alike there.
+- **Known weak spot:** PitWall's imagined futures assume rain may stop sooner than it often does, so it sometimes switches to rain tyres a lap late.
 
 **Real 2023 races.** PitWall replaced one midfield driver; we compare it with that driver's real pit stops run through the same simulator.
 
