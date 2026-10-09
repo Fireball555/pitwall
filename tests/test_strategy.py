@@ -23,7 +23,7 @@ def test_all_four_cars_finish():
 def test_rollout_is_fast_enough():
     scn = sample_scenario(P, 5)
     t = time.time()
-    run_race(scn, [RolloutStrategy(n=200, seed=5)], P, sample_inventory(P, np.random.default_rng(5)))
+    run_race(scn, [RolloutStrategy(n=100, seed=5)], P, sample_inventory(P, np.random.default_rng(5)))
     assert time.time() - t < 6.0  # one full race, every lap re-planned
 
 

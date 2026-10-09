@@ -2,8 +2,13 @@
 
 Idea (Monte Carlo policy rollout): after every lap, list the sensible options (stay out, or pit
 for each compound, plus fuel amounts in endurance mode). For each option, play out the rest of
-the race in 200 imagined futures, with later decisions following the simple rules, and pick the
-option with the best average finish. Every option is scored on the SAME futures, so differences
+the race in 100 imagined futures, with later decisions following a simple base policy, and pick
+the option with the best average finish.
+
+The base policy is not one fixed rule but a small family of them (BASES): the simple rules with
+different stint lengths and compound preferences. Each option is scored with whichever base
+policy does best on average for it (a "superheuristic", Bertsekas). Rollout is guaranteed to do
+at least as well as its base policies in expectation, so a richer family = a stronger strategist. Every option is scored on the SAME futures, so differences
 come from the decision, not from luck. Everything is vectorised: all options x all futures run
 as one numpy batch.
 """
@@ -20,17 +25,31 @@ from pitwall.strategy.rules import RULES
 
 PENALTY = 1000.0  # seconds added for a DNF or a disqualification in an imagined future
 
+# Base policies for the imagined futures, as (wear, preferred dry compound or -1 for the rules' choice):
+#   wear > 0: pit when tyre age reaches wear x the compound's cliff lap (0.8 = the simple rules)
+#   wear < 0: plan -wear more stops, splitting the remaining laps into equal stints
+# (0.8, -1) is exactly the simple rules.
+# 8 policies: the simple rules, a longer-stint variant, and 1- or 2-stop equal-stint plans.
+BASES: list[tuple[float, int]] = [(0.8, -1), (1.0, -1), (-1, -1), (-1, 1), (-1, 2), (-2, -1), (-2, 0), (-2, 2)]
+
 
 def _family(cid: np.ndarray) -> np.ndarray:
     return (cid >= INTER).astype(int)  # 0 = dry, 1 = wet tyres
 
 
 def simulate(P: TrackParams, car: CarState, obs: Observation, actions: list[Action],
-             fut: dict[str, np.ndarray]) -> np.ndarray:
-    """Finish time of the rest of the race for every (action, future). Returns shape (len(actions), n)."""
-    K, (n, R) = len(actions), fut["status"].shape
-    B = K * n
-    status, wet, noise = (np.tile(fut[k], (K, 1)) for k in ("status", "wetness", "noise"))
+             fut: dict[str, np.ndarray], bases: list[tuple[float, int]] | None = None) -> np.ndarray:
+    """Finish time of the rest of the race for every (action, base policy, future).
+    Returns shape (len(actions), len(bases), n)."""
+    bases = bases or [(RULES["wear_frac"], -1)]
+    K, H, (n, R) = len(actions), len(bases), fut["status"].shape
+    B = K * H * n
+    status, wet, noise = (np.tile(fut[k], (K * H, 1)) for k in ("status", "wetness", "noise"))
+    wear_frac = np.tile(np.repeat([b[0] for b in bases], n), K).astype(float)
+    # equal-stint plans: stint length = (laps left + current tyre age) / (stops + 1)
+    stops = np.maximum(-wear_frac, 0)
+    stint = np.where(wear_frac < 0, np.ceil((R + car.age) / (stops + 1)), 0.0)
+    pref = np.tile(np.repeat([b[1] for b in bases], n), K)
     inv = car.inventory
     m = len(inv)
     set_cid = np.array([s.cid for s in inv], dtype=int) if m else np.zeros(0, int)
@@ -49,10 +68,10 @@ def simulate(P: TrackParams, car: CarState, obs: Observation, actions: list[Acti
     rows = np.arange(B)
     endurance = P.mode == "endurance"
 
-    first_pit = np.repeat([a.pit for a in actions], n)
+    first_pit = np.repeat([a.pit for a in actions], H * n)
     ids = [s.set_id for s in inv]
-    first_choice = np.repeat([ids.index(a.set_id) if a.pit else -1 for a in actions], n)
-    first_fuel = np.repeat([a.fuel_add for a in actions], n).astype(float)
+    first_choice = np.repeat([ids.index(a.set_id) if a.pit else -1 for a in actions], H * n)
+    first_fuel = np.repeat([a.fuel_add for a in actions], H * n).astype(float)
 
     for k in range(R):
         left = R - k
@@ -60,7 +79,7 @@ def simulate(P: TrackParams, car: CarState, obs: Observation, actions: list[Acti
             pit, choice, fuel_add = first_pit, first_choice, first_fuel
         else:
             pit, choice, fuel_add = _rules_policy(P, wet[:, k - 1], cid, age, fuel, used, race_wet, avail,
-                                                  set_cid, set_age, set_dry, left)
+                                                  set_cid, set_age, set_dry, left, wear_frac, pref, stint)
         has = pit & (choice >= 0)
         safe_choice = np.where(has, choice, 0)
         loss = np.zeros(B)
@@ -88,17 +107,23 @@ def simulate(P: TrackParams, car: CarState, obs: Observation, actions: list[Acti
     total += np.where(dead, PENALTY, 0.0)
     if not endurance:
         total += np.where(~race_wet & (used.sum(1) < 2), PENALTY, 0.0)
-    return total.reshape(K, n)
+    return total.reshape(K, H, n)
 
 
-def _rules_policy(P, w, cid, age, fuel, used, race_wet, avail, set_cid, set_age, set_dry, left):
-    """numpy twin of RulesStrategy.decide, for many futures at once."""
+def _rules_policy(P, w, cid, age, fuel, used, race_wet, avail, set_cid, set_age, set_dry, left,
+                  wear_frac=None, pref=None, stint=None):
+    """numpy twin of RulesStrategy.decide, for many futures at once. wear_frac and pref (per row)
+    turn it into the family of base policies; the defaults are exactly the simple rules."""
     B = len(cid)
     is_wet_tyre = cid >= INTER
     full_wet = w >= RULES["wet_at"]
     inter = (w >= RULES["inter_at"]) & ~full_wet
     weather = (full_wet & (cid != WET)) | (inter & ~is_wet_tyre) | (is_wet_tyre & (w < RULES["slick_at"]))
-    worn = ~is_wet_tyre & (age >= RULES["wear_frac"] * P.cliff_lap[cid]) & (left > 5)
+    wf = RULES["wear_frac"] if wear_frac is None else wear_frac
+    limit = wf * P.cliff_lap[cid]
+    if stint is not None:
+        limit = np.where(stint > 0, stint, limit)
+    worn = ~is_wet_tyre & (age >= limit) & (left > 5)
     n_used = used.sum(1)
     other_dry = (avail & set_dry[None, :] & ~used[:, np.minimum(set_cid, 2)]).any(1) if len(set_cid) else np.zeros(B, bool)
     two = ~race_wet & (n_used < 2) & (left <= RULES["two_compound_by"]) & ~is_wet_tyre & other_dry
@@ -115,6 +140,8 @@ def _rules_policy(P, w, cid, age, fuel, used, race_wet, avail, set_cid, set_age,
     else:
         rank = np.array([0, 1, 2])
     score = np.tile(rank.astype(float), (B, 1)) + np.where((n_used < 2)[:, None] & used, 10.0, 0.0)
+    if pref is not None:
+        score -= np.where(np.arange(3)[None, :] == pref[:, None], 5.0, 0.0)  # preferred compound first
     if len(set_cid):
         has_c = np.stack([(avail & (set_cid == c)[None, :]).any(1) for c in DRY_IDS], axis=1)
         score += np.where(has_c, 0.0, 100.0)
@@ -139,7 +166,7 @@ def _rules_policy(P, w, cid, age, fuel, used, race_wet, avail, set_cid, set_age,
 class RolloutStrategy:
     name = "rollout"
 
-    def __init__(self, n: int = 200, seed: int = 0, hysteresis: float = 0.5):
+    def __init__(self, n: int = 100, seed: int = 0, hysteresis: float = 0.5):
         self.n, self.seed, self.hysteresis = n, seed, hysteresis
 
     def reset(self, belief: TrackParams, car: CarState) -> None:
@@ -181,7 +208,9 @@ class RolloutStrategy:
         opts = self.options(car, obs)
         if len(opts) == 1:
             return Decision(opts[0][1])
-        times = simulate(self.P, car, obs, [a for _, a in opts], self.futures(obs))
+        all_times = simulate(self.P, car, obs, [a for _, a in opts], self.futures(obs), BASES)  # (K, H, n)
+        h_best = all_times.mean(2).argmin(1)              # best base policy for each option
+        times = all_times[np.arange(len(opts)), h_best]   # (K, n)
         means = times.mean(1)
         best = int(np.argmin(means))
         options = {lab: float(v) for (lab, _), v in zip(opts, means)}

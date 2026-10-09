@@ -52,7 +52,7 @@ def out_path(track: str, mode: str, test: str) -> Path:
 
 
 def evaluate(track: str, mode: str = "f1", n: int = 1000, seed0: int = 0, test: str = "main",
-             workers: int | None = None, n_futures: int = 200, save: bool = True) -> pd.DataFrame:
+             workers: int | None = None, n_futures: int = 100, save: bool = True) -> pd.DataFrame:
     if test == "rain_sweep":
         jobs = [(track, mode, seed0 + i, test, rp, n_futures) for rp in (0.0, 0.1, 0.2, 0.3, 0.4, 0.5) for i in range(n)]
     else:

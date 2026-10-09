@@ -78,7 +78,7 @@ def load_param_samples(name: str, mode: str = "f1", n: int = 200, seed: int = 0)
     f = DATA_DIR / "samples" / f"{name}.json"
     if f.exists():
         out = []
-        for s in json.loads(f.read_text()):
+        for s in json.loads(f.read_text())[:n]:
             out.append(replace(P, deg=np.array(s["deg"], float), offset=np.array(s["offset"], float),
                                pit_loss=float(s["pit_loss"]), fuel_effect=float(s["fuel_effect"])))
         return out

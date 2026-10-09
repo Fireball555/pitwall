@@ -32,3 +32,8 @@ def test_proof_and_replay_answer():
     drivers = client.get("/api/replay/drivers", params={"track": "bahrain"}).json()["drivers"]
     rep = client.get("/api/replay", params={"track": "bahrain", "driver": drivers[0]}).json()
     assert rep["our_finish_pos"] >= 1 and "sanity" in rep
+
+
+def test_zandvoort_replay_is_refused_with_a_reason():
+    r = client.get("/api/replay/drivers", params={"track": "zandvoort"})
+    assert r.status_code == 400 and "red flag" in r.json()["detail"]

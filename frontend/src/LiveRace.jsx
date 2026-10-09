@@ -7,7 +7,7 @@ import { CARS, ORDER, TRACK_NAMES, TYRES, fmtTime, signed } from "./theme.js";
 import { usePlayback } from "./usePlayback.js";
 
 export default function LiveRace() {
-  const [form, setForm] = useState({ track: "bahrain", mode: "f1", seed: 7, rainOn: false, rain: 0.5, sc: 1, n: 200 });
+  const [form, setForm] = useState({ track: "bahrain", mode: "f1", seed: 7, rainOn: false, rain: 0.5, sc: 1, n: 100 });
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -54,7 +54,7 @@ export default function LiveRace() {
           <button className="btn primary" disabled={busy} onClick={() => run()}>{busy ? "Racing…" : "Run race"}</button>
           <button className="btn" disabled={busy} onClick={randomRace}>Random race</button>
         </div>
-        {busy && <p className="help">Our strategist is imagining 200 futures for every option, every lap.</p>}
+        {busy && <p className="help">Our strategist is imagining {form.n} futures for every option, every lap.</p>}
         {err && <p className="error">{err}</p>}
       </aside>
 
@@ -194,7 +194,7 @@ function Decisions({ data, lap, picked, setPicked }) {
       </div>
       <div className="panel">
         <h3>Options compared{current ? ` (${current.reason.split(":")[0]})` : ""}</h3>
-        <p className="help">Average finish across 200 imagined futures, relative to the best option.</p>
+        <p className="help">Average finish across the imagined futures, relative to the best option.</p>
         <div className="bars">
           {opts.sort((a, b) => a[1] - b[1]).map(([k, v]) => (
             <div className="bar-row" key={k}>

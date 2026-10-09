@@ -20,8 +20,8 @@ def test_samples_differ_from_main_numbers():
 
 
 def test_fit_recovers_known_numbers_from_synthetic_race():
-    df = make_synthetic("monza")
-    P = load_track("monza")
+    df = make_synthetic("bahrain")
+    P = load_track("bahrain")
     fit = fit_pace(clean_laps(df), int(df["lap"].max()))
     assert abs(fit["fuel_effect"] - P.fuel_effect) < 0.01
     assert abs(fit["deg"]["MEDIUM"] - P.deg[1]) < 0.5 * P.deg[1] + 0.02

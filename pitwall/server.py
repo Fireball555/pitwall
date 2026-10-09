@@ -94,7 +94,7 @@ def _race(track: str, mode: str, seed: int, rain: float | None, sc: float, n: in
 
 @app.get("/api/race")
 def race(track: str = "bahrain", mode: str = "f1", seed: int = 7, rain: float | None = None,
-         sc: float = Query(1.0, ge=0, le=5), n: int = Query(200, ge=20, le=400)):
+         sc: float = Query(1.0, ge=0, le=5), n: int = Query(100, ge=20, le=400)):
     check_track(track)
     if mode not in ("f1", "endurance"):
         raise HTTPException(400, "mode must be 'f1' or 'endurance'")
@@ -124,16 +124,25 @@ def proof(track: str = "bahrain", mode: str = "f1"):
     })
 
 
+NO_REPLAY = {"zandvoort": "Zandvoort 2023 had a 40-minute red flag, which our simulator doesn't model, so it can't be replayed fairly."}
+
+
+def check_replay(track: str) -> None:
+    check_track(track)
+    if track in NO_REPLAY:
+        raise HTTPException(400, NO_REPLAY[track])
+
+
 @app.get("/api/replay/drivers")
 def replay_drivers(track: str = "bahrain"):
-    check_track(track)
+    check_replay(track)
     df, is_real = load_real(track)
     return {"track": track, "is_real": is_real, "drivers": midfield_drivers(track) or sorted(df["driver"].unique())}
 
 
 @app.get("/api/replay")
 def replay(track: str = "bahrain", driver: str = "ALB"):
-    check_track(track)
+    check_replay(track)
     f = RESULTS / f"replay_{track}_{driver}.json"
     rep = json.loads(f.read_text()) if f.exists() else replay_with_sanity(track, driver)
     return clean(rep)

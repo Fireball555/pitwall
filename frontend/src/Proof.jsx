@@ -49,7 +49,7 @@ function Results({ d }) {
       <div className="stats">
         <Stat value={`${signed(gp[0])} s`} label="average time gained on the Pirelli plan" sub={`95% confidence: ${signed(gp[1])} to ${signed(gp[2])} s`} />
         <Stat value={`${Math.round(100 * (m.win_rate_vs.pirelli ?? 0))}%`} label="of races won against the Pirelli plan" sub={`against simple rules: ${Math.round(100 * (m.win_rate_vs.rules ?? 0))}%`} />
-        <Stat value={m.oracle_share != null ? `${Math.round(100 * m.oracle_share)}%` : "–"} label="of the best possible gain captured" sub="the Oracle knows the future; this is how close we get" />
+        <Stat value={m.oracle_share != null ? `${Math.round(100 * Math.min(1, m.oracle_share))}%` : "–"} label="of the best possible gain captured" sub={m.oracle_share >= 1 ? "matched the Oracle, which knows the future (it isn't a perfect optimum)" : "the Oracle knows the future; this is how close we get"} />
         <Stat value={m.n_races.toLocaleString()} label="races in this test" sub={d.accuracy ? `simulator error ${d.accuracy.mae_s} s per lap` : "simulator accuracy: not measured yet"} />
       </div>
       <div className="two">
@@ -59,7 +59,7 @@ function Results({ d }) {
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={d.histogram} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="#27476b" strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="from" stroke="#93a9c2" tickFormatter={(v) => v.toFixed(0)} />
+              <XAxis dataKey="from" stroke="#93a9c2" tickFormatter={(v) => v.toFixed(1)} />
               <YAxis stroke="#93a9c2" width={36} allowDecimals={false} />
               <Tooltip {...tip} labelFormatter={(v, p) => p?.[0] ? `${signed(p[0].payload.from)} to ${signed(p[0].payload.to)} s` : ""} formatter={(v) => [v, "races"]} />
               <Bar dataKey="count" isAnimationActive={false}>
