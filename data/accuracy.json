@@ -1,0 +1,34 @@
+{
+  "bahrain": {
+    "mae_s": 0.45,
+    "rmse_s": 0.57,
+    "skill": 0.76,
+    "stint_skill": 0.22,
+    "laps": 914,
+    "method": "fit on the 2022 race, predict the 2023 race"
+  },
+  "monza": {
+    "mae_s": 0.44,
+    "rmse_s": 0.62,
+    "skill": -0.03,
+    "stint_skill": -0.26,
+    "laps": 878,
+    "method": "fit on the 2022 race, predict the 2023 race"
+  },
+  "zandvoort": {
+    "mae_s": 0.52,
+    "rmse_s": 0.71,
+    "skill": 0.51,
+    "stint_skill": -0.08,
+    "laps": 682,
+    "method": "fit on the 2022 race, predict the 2023 race"
+  },
+  "singapore": {
+    "mae_s": 2.06,
+    "rmse_s": 2.6,
+    "skill": -3.22,
+    "stint_skill": -1.46,
+    "laps": 955,
+    "method": "fit on the 2022 race, predict the 2023 race"
+  }
+}

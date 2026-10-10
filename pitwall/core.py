@@ -96,6 +96,7 @@ class Decision:
     action: Action
     reason: str = ""
     options: dict[str, float] = field(default_factory=dict)  # option label -> expected finish time (s)
+    samples: dict[str, list[float]] = field(default_factory=dict)  # option -> some imagined finish times (s)
 
 
 def freshest(inventory: list[TyreSet], cid: int) -> TyreSet | None:

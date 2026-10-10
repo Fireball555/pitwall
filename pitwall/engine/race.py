@@ -75,6 +75,7 @@ def step(car: CarState, d: Decision, scn: Scenario, P: TrackParams) -> dict:
         "compound": COMPOUNDS[car.cid], "tyre_age": car.age, "fuel": max(car.fuel, 0.0),
         "fuel_added": fuel_added, "pitted": pitted, "status": status, "wetness": wet,
         "reason": d.reason, "options": json.dumps(d.options) if d.options else "",
+        "samples": json.dumps(d.samples) if d.samples else "",
     }
 
 

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "./api.js";
 import { strip, Thinking } from "./CarCard.jsx";
 import Circuit from "./Circuit.jsx";
+import Multiverse from "./Multiverse.jsx";
+import StartLights from "./StartLights.jsx";
 import { CARS, TRACK_NAMES, TYRES } from "./theme.js";
 import Timeline from "./Timeline.jsx";
 import { useRaceClock } from "./useRaceClock.js";
@@ -20,15 +22,25 @@ export default function RealRaces() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
+  // Only the newest request may update the screen: clicking quickly between races and drivers
+  // must never show one driver's replay under another driver's name.
+  const latest = useRef(0);
+  const pickTrack = (t) => { if (t !== track) { setDriver(null); setDrivers(null); setRep(null); setTrack(t); } };
   useEffect(() => {
-    setDrivers(null); setRep(null); setErr(null);
-    api.drivers(track).then((d) => { setDrivers(d); setDriver(d.drivers[0]); }).catch((e) => setErr(e.message));
+    setErr(null);
+    let live = true;
+    api.drivers(track).then((d) => { if (live) { setDrivers(d); setDriver(d.drivers[0]); } }).catch((e) => live && setErr(e.message));
+    return () => { live = false; };
   }, [track]);
   useEffect(() => {
-    if (!driver) return;
+    if (!driver || !drivers?.drivers.includes(driver) || drivers.track !== track) return;
+    const id = ++latest.current;
     setBusy(true); setErr(null);
-    api.replay(track, driver).then(setRep).catch((e) => setErr(e.message)).finally(() => setBusy(false));
-  }, [track, driver]);
+    api.replay(track, driver)
+      .then((r) => { if (id === latest.current) setRep(r); })
+      .catch((e) => { if (id === latest.current) setErr(e.message); })
+      .finally(() => { if (id === latest.current) setBusy(false); });
+  }, [track, driver, drivers]);
 
   const clock = useRaceClock(rep?.laps.length ?? 1, rep ? `${rep.track}${rep.driver}` : "", null, false);
 
@@ -44,7 +56,7 @@ export default function RealRaces() {
             <span className="field-label">Race</span>
             <div className="seg2" role="group" aria-label="Race">
               {Object.entries(RACES).map(([id, n]) => (
-                <button key={id} className={track === id ? "on" : ""} aria-pressed={track === id} onClick={() => setTrack(id)}>{n} 2023</button>
+                <button key={id} className={track === id ? "on" : ""} aria-pressed={track === id} onClick={() => pickTrack(id)}>{n} 2023</button>
               ))}
             </div>
           </div>
@@ -70,35 +82,66 @@ export default function RealRaces() {
 
 function Replay({ rep, clock }) {
   const { lap, frac } = clock;
+  const done = clock.finished;
+  const [lights, setLights] = useState(false);
+  const [mv, setMv] = useState(null);
+  const shown = useRef(new Set());
+  useEffect(() => { shown.current = new Set(); }, [rep]);
+  // pause at each of PitWall's pit calls and show the futures it imagined
+  useEffect(() => {
+    if (!clock.playing || lap < 2) return;
+    const d = rep.ours[lap - 1];
+    if (d?.reason && d.samples && !shown.current.has(lap)) {
+      shown.current.add(lap);
+      clock.pause();
+      setMv({ lap, decision: d, auto: true });
+    }
+  }, [lap, clock.playing, rep]); // eslint-disable-line react-hooks/exhaustive-deps
   const n = rep.laps.length;
   const i = lap - 1;
   const atGrid = clock.t === 0 && !clock.playing;
   const real = rep.real_driver;
   const ref = rep.sanity?.real_strategy_pos;
   const gained = ref != null && rep.our_finish_pos != null ? ref - rep.our_finish_pos : null;
+  const ourPos = atGrid ? rep.grid.OURS : rep.laps[i].order.indexOf("OURS") + 1;
+  const realPos = atGrid ? rep.real_grid : rep.real_driver[i]?.position;
+  const posDelta = ourPos && realPos ? realPos - ourPos : 0;
+  const st = rep.status[i], prevSt = rep.status[i - 1];
+  const banner = st === "SC" ? ["sc", "Safety car"] : st === "VSC" ? ["vsc", "Virtual safety car"]
+    : prevSt && prevSt !== "GREEN" ? ["clear", "Track clear"] : rep.wetness[i] > 0.2 ? ["rain vsc", "Wet track"] : null;
 
   return (
     <>
       <div className="verdicts">
-        <Tile big={`P${rep.real_finish_pos ?? "–"}`} label={`${rep.driver} for real`} sub={`started P${rep.real_grid}`} />
-        <Tile big={`P${ref ?? "–"}`} label="his real pit stops, in our simulator" sub="the fair comparison: same model for both" />
-        <Tile ours big={`P${rep.our_finish_pos ?? "–"}`} label="PitWall's own pit calls"
-          sub={gained == null ? "" : gained > 0 ? `${gained} place${gained === 1 ? "" : "s"} gained` : gained === 0 ? "same place" : `${-gained} place${gained === -1 ? "" : "s"} lost`} />
+        <Tile big={done ? `P${rep.real_finish_pos ?? "–"}` : "P?"} hidden={!done} reveal={done} delay={0}
+          label={`${rep.driver} for real`} sub={`started P${rep.real_grid}`} />
+        <Tile big={done ? `P${ref ?? "–"}` : "P?"} hidden={!done} reveal={done} delay={400}
+          label="his real stops, our simulator" sub="the fair comparison: same model for both" />
+        <Tile ours big={done ? `P${rep.our_finish_pos ?? "–"}` : "P?"} hidden={!done} reveal={done} delay={800}
+          label="PitWall's own pit calls"
+          sub={done ? <span className={`stamp ${gained > 0 ? "" : "neutral"}`} style={{ animationDelay: "1.4s" }}>
+            {gained > 0 ? `+${gained} place${gained === 1 ? "" : "s"} vs his stops` : gained === 0 ? "same place as his stops" : `${-gained} place${gained === -1 ? "" : "s"} lost`}</span>
+            : <button className="linkish" onClick={() => clock.seek(n + 1)}>Skip to the flag</button>} />
       </div>
 
       <div className="real-stage">
         <div className="center">
-          <div className="lap-head">
-            <div className="lap-big">{atGrid ? <>On the <b>grid</b></> : <>Lap <b>{lap}</b><small>/{n}</small></>}</div>
-            {!atGrid && <span className={`flag2 ${rep.status[i].toLowerCase()} ${rep.wetness[i] > 0.2 ? "rain" : ""}`}>
-              {rep.wetness[i] > 0.2 && rep.status[i] === "GREEN" ? "Wet track" : FLAG[rep.status[i]]}</span>}
+          {done && <div className="chequer" key={rep.driver} />}
+          {!atGrid && banner && <div key={banner[0]} className={`banner ${banner[0]}`}><span>{banner[1]}</span></div>}
+          <div className="center-top">
+            <div className="lap-big">{atGrid ? <><span className="lap-word">On the</span><b>Grid</b></> : <><span className="lap-word">Lap</span><b>{lap}</b><small>/{n}</small></>}</div>
+            <p className="race-sub">{TRACK_NAMES[rep.track]} Grand Prix 2023<br />PitWall in {rep.driver}'s car</p>
+            <div className="delta">
+              <span className="label"><span className="tag" style={{ "--car": OURS }}>PWL</span> vs <span className="tag" style={{ "--car": GHOST }}>{rep.driver}</span></span>
+              <div className={`delta-val ${posDelta > 0 ? "ahead" : ""}`}>{atGrid ? "—" : posDelta > 0 ? `+${posDelta}` : posDelta}</div>
+              <div className="delta-sub">{atGrid ? "places vs the real race" : posDelta > 0 ? "places ahead of the real race" : posDelta < 0 ? "places behind the real race" : "same place as the real race"}</div>
+            </div>
           </div>
-          <p className="race-sub">{TRACK_NAMES[rep.track]} Grand Prix 2023 · PitWall in {rep.driver}'s car</p>
           <RaceMap rep={rep} i={i} frac={atGrid ? 0 : frac} atGrid={atGrid} />
           <p className="map-legend">
             <span><i className="dot" style={{ background: OURS }} />PitWall in {rep.driver}'s car</span>
             <span><i className="dot ring" />{rep.driver} for real</span>
-            <span><i className="dot" style={{ background: "#5b7090" }} />the other 19 cars</span>
+            <span><i className="dot" style={{ background: "#6b6e78" }} />the other 19 cars (the two around PitWall are labelled)</span>
           </p>
         </div>
         <Tower rep={rep} i={i} atGrid={atGrid} />
@@ -116,7 +159,9 @@ function Replay({ rep, clock }) {
         <Positions rep={rep} lap={lap} />
       </div>
 
-      <Timeline laps={n} status={rep.status} wetness={rep.wetness} clock={clock} startLabel="Lights out"
+      {lights && <StartLights onDone={() => { setLights(false); clock.play(); }} />}
+      {mv && <Multiverse lap={mv.lap} decision={mv.decision} auto={mv.auto} onClose={() => { setMv(null); clock.play(); }} />}
+      <Timeline laps={n} status={rep.status} wetness={rep.wetness} clock={clock} startLabel="Lights out" onStart={() => setLights(true)}
         stops={[
           { laps: rep.ours.filter((o, k) => k > 0 && o.pitted).map((o) => o.lap), colour: OURS, label: "PitWall stop" },
           { laps: real.filter((r, k) => k > 0 && r.pitted).map((r) => r.lap), colour: GHOST, label: `${rep.driver} real stop` },
@@ -125,9 +170,9 @@ function Replay({ rep, clock }) {
   );
 }
 
-function Tile({ big, label, sub, ours }) {
+function Tile({ big, label, sub, ours, hidden, reveal, delay }) {
   return (
-    <div className={`vtile ${ours ? "ours" : ""}`}>
+    <div className={`vtile ${ours ? "ours" : ""} ${hidden ? "hidden" : ""} ${reveal ? "reveal" : ""}`} style={reveal ? { animationDelay: `${delay}ms` } : undefined}>
       <div className="vtile-big">{big}</div>
       <div><div className="vtile-label">{label}</div><div className="vtile-sub">{sub}</div></div>
     </div>
@@ -138,7 +183,7 @@ function Tile({ big, label, sub, ours }) {
 function gapsAt(rep, k) {
   if (k < 0) {
     const out = {};
-    Object.entries(rep.grid).forEach(([d, g]) => { if (d !== rep.driver) out[d] = (g - 1) * 0.006; });
+    Object.entries(rep.grid).forEach(([d, g]) => { if (d !== rep.driver) out[d] = (g - 1) * 0.0022; });
     return out;
   }
   const L = rep.laps[k];
@@ -160,12 +205,12 @@ function RaceMap({ rep, i, frac, atGrid }) {
   Object.keys(cur).forEach((d) => {
     if (prev[d] == null && !atGrid) return;
     const g = atGrid ? cur[d] : prev[d] + (cur[d] - prev[d]) * frac;
-    const f = (atGrid ? -0.004 : frac) - g;
-    if (d === "__ghost") markers.push({ id: d, f, colour: GHOST, r: 21, ring: true, label: `${rep.driver} real`, title: `${rep.driver}, what really happened` });
-    else if (d === "OURS") markers.push({ id: d, f, colour: OURS, r: 22, top: true, label: "PitWall", title: `PitWall in ${rep.driver}'s car` });
-    else markers.push({ id: d, f, colour: nearby.has(d) ? "#9fb4cf" : "#5b7090", r: 14, label: nearby.has(d) ? d : undefined, title: d });
+    const f = (atGrid ? -0.003 : frac) - g;
+    if (d === "__ghost") markers.push({ id: d, f, colour: GHOST, r: 21, shape: "ring", tag: `${rep.driver} real`, title: `${rep.driver}, what really happened` });
+    else if (d === "OURS") markers.push({ id: d, f, colour: OURS, r: 22, shape: "circle", ours: true, tag: "PWL", title: `PitWall in ${rep.driver}'s car` });
+    else markers.push({ id: d, f, colour: nearby.has(d) ? "#c9c6bd" : "#6b6e78", r: 13, shape: "dot", tag: nearby.has(d) ? d : undefined, title: d });
   });
-  return <Circuit track={rep.track} markers={markers} wet={atGrid ? 0 : rep.wetness[i]} className="map-real" />;
+  return <Circuit track={rep.track} markers={markers} wet={atGrid ? 0 : rep.wetness[i]} sc={!atGrid && rep.status[i] !== "GREEN"} className="map-real" />;
 }
 
 // The running order, F1 timing-tower style, with the real driver's actual place as a ghost row.
@@ -190,7 +235,7 @@ function Tower({ rep, i, atGrid }) {
   let pos = 0;
   return (
     <div className="tower2" aria-live="off">
-      <div className="tower2-head"><span>{atGrid ? "Starting grid" : "Running order"}</span><span>{atGrid ? "" : "gap"}</span></div>
+      <div className="tower2-head"><span className="label">{atGrid ? "Starting grid" : "Running order"}</span><span className="label">{atGrid ? "" : "gap"}</span></div>
       <ol>
         {rows.map((r) => {
           const ghost = r.d === "__ghost";

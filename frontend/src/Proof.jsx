@@ -74,10 +74,10 @@ function Results({ d }) {
   return (
     <>
       <div className="stats">
-        <Stat value={`${signed(gp[0])} s`} label="average time gained on the Pirelli plan" sub={`95% confidence: ${signed(gp[1])} to ${signed(gp[2])} s`} />
+        <Stat value={`${signed(gp[0])} s`} label="average time gained on the Pirelli plan" sub={`95% interval (simulation noise only): ${signed(gp[1])} to ${signed(gp[2])} s`} />
         <Stat value={`${Math.round(100 * (m.win_rate_vs.pirelli ?? 0))}%`} label="of races won against the Pirelli plan" sub={`against simple rules: ${Math.round(100 * (m.win_rate_vs.rules ?? 0))}%`} />
         <Stat value={m.oracle_share != null ? `${Math.round(100 * Math.min(1, m.oracle_share))}%` : "–"} label="of Hindsight's gain captured" sub={m.oracle_share >= 1 ? "matched Hindsight, which knows the future (not a perfect optimum)" : "Hindsight knows the future; this is how close we get"} />
-        <Stat value={m.n_races.toLocaleString()} label="races in this test" sub={d.accuracy ? `simulator error ${d.accuracy.mae_s} s per lap` : "simulator accuracy: not measured yet"} />
+        <Stat value={m.n_races.toLocaleString()} label="races in this test" sub={d.accuracy ? `lap-time error on an unseen race: ${d.accuracy.mae_s} s per lap (fit on 2022, tested on 2023)` : "simulator accuracy: run python -m pitwall.data.accuracy"} />
       </div>
       <div className="two">
         <div className="panel">
@@ -113,7 +113,7 @@ function Results({ d }) {
       </div>
       <div className="two">
         <div className="panel">
-          <h3>Fairness test: does it still win when its numbers are wrong?</h3>
+          <h3>Fairness test: does it still win when its tyre and pit-loss numbers are wrong?</h3>
           {d.mismatch ? (
             <p className="big-text">
               In {d.mismatch.n_races} races the real tyre wear, pit loss and fuel effect were secretly changed, while every car kept

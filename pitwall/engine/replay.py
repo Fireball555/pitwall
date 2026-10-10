@@ -130,7 +130,8 @@ def replay(track: str, driver: str, strategy, save: bool = True) -> dict:
             order_rows.append({"lap": L, "order": [k for k, _ in order], "elapsed": {k: round(v, 3) for k, v in order}})
         ours_rows.append({"lap": L, "compound": rec["compound"], "tyre_age": rec["tyre_age"],
                           "pitted": bool(rec["pitted"]), "reason": dec.reason,
-                          "options": {k: round(float(v), 2) for k, v in (dec.options or {}).items()}})
+                          "options": {k: round(float(v), 2) for k, v in (dec.options or {}).items()},
+                          **({"samples": dec.samples} if dec.reason and dec.samples else {})})
     final_order = order_rows[-1]["order"] if order_rows else []
     out = {
         "track": track, "driver": driver, "is_real_data": is_real, "laps_total": laps,

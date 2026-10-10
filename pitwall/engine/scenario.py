@@ -73,12 +73,13 @@ def _forecast(P: TrackParams, wet: np.ndarray, rng: np.random.Generator) -> np.n
     return fc
 
 
-def _forced_rain(laps: int, start: int, peak: float, seed: int) -> np.ndarray:
-    """Rain that starts exactly at lap index `start` (for the app's "rain now" button)."""
+def _forced_rain(laps: int, start: int, peak: float, seed: int, level: float = 0.0) -> np.ndarray:
+    """Rain that starts exactly at lap index `start` (for the app's "rain now" button). `level` is how
+    wet the track already is, so pressing it during rain never makes the track drier."""
     hold = int(np.random.default_rng(seed + 7).integers(10, 21))
-    wet, level = np.zeros(laps), 0.0
+    wet, top = np.zeros(laps), max(peak, level)
     for k in range(start, laps):
-        level = min(peak, level + 2 * RAIN_RISE) if k < start + hold else max(0.0, level - RAIN_DRY)
+        level = min(top, level + 2 * RAIN_RISE) if k < start + hold else max(0.0, level - RAIN_DRY)
         wet[k] = level
     return wet
 
@@ -106,8 +107,9 @@ def sample_scenario(P: TrackParams, seed: int, rain_prob: float | None = None, s
     noise = rng.normal(0.0, P.noise_sd, P.laps)
     planned = wet
     if rain_start is not None:
-        wet = np.maximum(np.where(np.arange(P.laps) < rain_start, wet, 0.0),
-                         _forced_rain(P.laps, max(1, rain_start), rain_peak, seed))
+        s0 = max(1, rain_start)
+        wet = np.maximum(np.where(np.arange(P.laps) < s0, wet, 0.0),
+                         _forced_rain(P.laps, s0, rain_peak, seed, float(wet[min(s0, P.laps) - 1])))
     if dry_start is not None and 1 <= dry_start < P.laps:
         wet = _forced_dry(wet, dry_start)
     if sc_start is not None and 1 <= sc_start < P.laps - 1:

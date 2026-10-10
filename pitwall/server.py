@@ -91,9 +91,18 @@ def _race(track: str, mode: str, seed: int, rain: float | None, sc: float, n: in
             "tyre_life": (g["tyre_age"] / P.cliff_lap[cid]).tolist(),
             "tyre_loss": (P.deg[cid] * g["tyre_age"]
                           + P.cliff_coef[cid] * np.maximum(0.0, g["tyre_age"] - P.cliff_lap[cid]) ** 2).tolist(),
-            "decisions": [{"lap": int(r.lap), "reason": r.reason, "options": json.loads(r.options) if r.options else {}}
+            "decisions": [{"lap": int(r.lap), "reason": r.reason, "options": json.loads(r.options) if r.options else {},
+                           **({"samples": json.loads(r.samples)} if getattr(r, "samples", "") else {})}
                           for r in g.itertuples() if r.reason or r.options],
         }
+        # a car that runs out of fuel stops logging laps: freeze its last lap so every array is full length,
+        # and say how many laps it completed so the app can show it as out of the race
+        done = len(g)
+        for k, v in cars[car].items():
+            if isinstance(v, list) and k != "decisions" and 0 < len(v) < P.laps:
+                v.extend([v[-1]] * (P.laps - len(v)))
+        cars[car]["out_after"] = done if done < P.laps else None
+        cars[car]["dsq"] = done >= P.laps and not np.isfinite(finish.get(car, np.nan))
     first = log[log["car"] == log["car"].iloc[0]].sort_values("lap")
     return clean({
         "track": track, "mode": mode, "seed": seed, "laps": P.laps, "tag": scn.tags[0],
@@ -148,7 +157,8 @@ def proof(track: str = "bahrain", mode: str = "f1"):
         "rain_sweep": [r for r in summary.get("rain_sweep", []) if r["rain_prob"] >= 0],
         "histogram": [{"from": float(edges[i]), "to": float(edges[i + 1]), "count": int(hist[i])} for i in range(len(hist))],
         "losses": int((gains < 0).sum()), "races": int(len(gains)), "worst": float(gains.min()) if len(gains) else None,
-        "accuracy": json.loads((DATA_DIR / "accuracy.json").read_text()) if (DATA_DIR / "accuracy.json").exists() else None,
+        "accuracy": (json.loads((DATA_DIR / "accuracy.json").read_text()).get(track)
+                     if (DATA_DIR / "accuracy.json").exists() else None),
     })
 
 
