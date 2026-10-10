@@ -93,3 +93,20 @@ def test_forced_rain_is_a_surprise_for_the_fair_strategists():
     lb, _ = run_race(b, [RolloutStrategy(n=50, seed=1)], P, inv)
     cols = ["lap", "compound", "pitted"]
     assert la[la["lap"] <= 20][cols].equals(lb[lb["lap"] <= 20][cols])
+
+
+def test_rain_button_during_rain_never_dries_the_track():
+    """Pressing Heavy rain while it is already raining must not reset the track to dry first."""
+    import numpy as np
+
+    from pitwall.data.params import load_track
+    from pitwall.engine.scenario import sample_scenario
+
+    P = load_track("bahrain")
+    a = sample_scenario(P, 8, rain_prob=1.0)
+    wet_laps = np.flatnonzero(a.wetness > 0.3)
+    assert len(wet_laps), "seed 8 should have natural rain"
+    L = int(wet_laps[0]) + 2
+    b = sample_scenario(P, 8, rain_prob=1.0, rain_start=L, rain_peak=1.0)
+    assert np.all(b.wetness[L:L + 5] >= a.wetness[L - 1] - 1e-9)
+    assert np.all(np.diff(b.wetness[L - 1:L + 5]) >= -1e-9)

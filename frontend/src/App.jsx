@@ -24,7 +24,7 @@ export default function App() {
           <span className="brand-mark" aria-hidden="true" />
           <div>
             <h1>PitWall</h1>
-            <p className="tagline">An F1 strategist that plays out the rest of the race before every call</p>
+            <p className="tagline">The F1 strategist that races the future before every call</p>
           </div>
         </div>
         <nav className="tabs" aria-label="Screens">
@@ -38,7 +38,7 @@ export default function App() {
       {err && <div className="notice bad">Can't reach the PitWall server ({err}). Start it with <code>python -m pitwall.server</code>.</div>}
       {placeholders > 0 && (
         <div className="notice">
-          {placeholders} of 4 tracks still use placeholder numbers. Run <code>python -m pitwall.data.build --all</code> to fit them from real 2023 data.
+          {placeholders} of 4 tracks still use placeholder numbers. Run <code>python -m pitwall.data.build --all</code> to fit them from real 2022–2023 data.
         </div>
       )}
       <main>

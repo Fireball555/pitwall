@@ -10,7 +10,7 @@ const WHAT = {
 export const strip = (r) => r.replace(/^Lap \d+:\s*/, "").replace(" ± 0.0", "").replace(/ \+ (\d+) kg \([^)]*\)/, " + $1 kg");
 
 // One car's dashboard: place, gap, tyre, fuel, and the last call it made.
-export default function CarCard({ car, data, lap, pos, gap }) {
+export default function CarCard({ car, data, lap, pos, gap, onExplain, compact = false }) {
   const c = data.cars[car];
   const i = lap - 1;
   const compound = c.compound[i];
@@ -22,13 +22,13 @@ export default function CarCard({ car, data, lap, pos, gap }) {
   const isOurs = car === "rollout";
 
   return (
-    <article className={`card ${isOurs ? "ours" : ""} ${pitted && lap > 1 ? "pitting" : ""}`} style={{ "--car": CARS[car].colour }}>
+    <article className={`card ${isOurs ? "ours" : ""} ${compact ? "compact" : ""} ${pitted && lap > 1 ? "pitting" : ""}`} style={{ "--car": CARS[car].colour }}>
       <header className="card-head">
         <div>
-          <h3>{CARS[car].tower}</h3>
+          <h3><span className="tag">{CARS[car].short}</span>{CARS[car].tower}</h3>
           <p className="card-what">{WHAT[car]}</p>
         </div>
-        <div className="card-pos">P{pos}</div>
+        <div className="card-pos">{gap === "Out of fuel" || gap === "Disqualified" ? "OUT" : `P${pos}`}</div>
       </header>
 
       <div className="card-row">
@@ -49,7 +49,7 @@ export default function CarCard({ car, data, lap, pos, gap }) {
         <small>{stops} stop{stops === 1 ? "" : "s"}</small>
       </div>
 
-      {isOurs && <Thinking d={now} max={3} />}
+      {isOurs && <Thinking d={now} max={4} onExplain={onExplain} />}
     </article>
   );
 }
@@ -59,14 +59,15 @@ export default function CarCard({ car, data, lap, pos, gap }) {
 export const optionLabel = (k) => k.replace(/^pit /, "Pit ").replace(/^stay out$/, "Stay out").replace(/^start /, "Start ")
   .replace(/ \+ (\d+) kg \([^)]*\)/, " · $1 kg");
 
-export function Thinking({ d, max = 4 }) {
+export function Thinking({ d, max = 4, onExplain }) {
   const opts = d?.options ? Object.entries(d.options).sort((a, b) => a[1] - b[1]) : [];
   if (opts.length < 2) return <p className="think-idle">Fresh tyres, green flag: nothing worth weighing this lap.</p>;
   const best = opts[0][1];
   const spread = Math.max(1, opts[opts.length - 1][1] - best);
   return (
     <div className="think">
-      <p className="think-title">This lap it compared</p>
+      <p className="think-title">This lap it compared
+        {onExplain && d?.samples && <button className="linkish" onClick={onExplain}>See the futures</button>}</p>
       {opts.slice(0, max).map(([k, v], n) => (
         <div className={`think-row ${n === 0 ? "best" : ""}`} key={k}>
           <span className="think-label" title={k}>{optionLabel(k)}</span>
@@ -86,9 +87,9 @@ function TyreHealth({ life, loss, wetTyre }) {
     <div className="health" title="Share of this tyre set's useful life used, and seconds per lap lost to wear">
       <div className="health-top">
         <span>Tyre wear</span>
-        <span className={tone}>{life >= 1 ? "Past its best" : `${pct}% used`}{!wetTyre && loss > 0.05 ? ` · ${loss.toFixed(1)} s/lap slower` : ""}</span>
+        <span className={tone}>{life >= 1 ? "100%+" : `${pct}%`}{!wetTyre && loss > 0.05 ? ` · +${loss.toFixed(1)} s/lap` : ""}</span>
       </div>
-      <div className={`health-bar ${tone}`}><span style={{ width: `${Math.min(100, pct)}%` }} /></div>
+      <div className={`health-bar ${tone}`}><span style={{ width: `${Math.min(100, pct)}%` }} />{life >= 1 && <b className="past">PAST ITS BEST</b>}</div>
     </div>
   );
 }

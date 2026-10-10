@@ -29,7 +29,7 @@ export function useRaceClock(laps, resetKey, resumeAt = null, autoplay = true) {
   }, [playing, secPerLap, laps]);
 
   const lap = Math.max(1, Math.min(laps, Math.floor(t) + 1));   // the lap being driven (1-based)
-  const frac = t >= laps ? 0 : t - Math.floor(t);                // how far round that lap the leader is
+  const frac = t >= laps ? 1 : t - Math.floor(t);                // how far round that lap the leader is
   const finished = t >= laps;
   return {
     t, lap, frac, finished, playing, secPerLap, setSecPerLap,

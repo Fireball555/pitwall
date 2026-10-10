@@ -1,9 +1,12 @@
-// Car colours never reuse F1 tyre colours (soft red, medium yellow, hard white, inter green, wet blue).
+// "Purple Sector": on F1 timing screens purple means fastest overall, so PitWall runs purple and
+// nothing else does. Car colours never reuse tyre colours (soft red, medium yellow, hard white,
+// inter green, wet blue); cars are also told apart by shape on the map (circle, diamond, triangle,
+// hollow diamond), so colour is never the only cue.
 export const CARS = {
-  pirelli: { label: "Pirelli plan", tower: "Pirelli plan", short: "PIR", colour: "#a78bfa" },
-  rules: { label: "Simple rules", tower: "Simple rules", short: "RUL", colour: "#fb923c" },
-  rollout: { label: "PitWall (ours)", tower: "PitWall", short: "PWL", colour: "#22d3ee" },
-  oracle: { label: "Hindsight (knows the future)", tower: "Hindsight", short: "HND", colour: "#94a3b8" },
+  pirelli: { label: "Pirelli plan", tower: "Pirelli plan", short: "PIR", colour: "#35c9d0", shape: "diamond" },
+  rules: { label: "Simple rules", tower: "Simple rules", short: "RUL", colour: "#ff8cc6", shape: "triangle" },
+  rollout: { label: "PitWall (ours)", tower: "PitWall", short: "PWL", colour: "#cf7dff", shape: "circle" },
+  oracle: { label: "Hindsight (knows the future)", tower: "Hindsight", short: "HND", colour: "#8c8f99", shape: "ghost" },
 };
 export const ORDER = ["pirelli", "rules", "rollout", "oracle"];
 export const TYRES = { SOFT: "#ef4444", MEDIUM: "#facc15", HARD: "#f1f5f9", INTER: "#22c55e", WET: "#3b82f6" };

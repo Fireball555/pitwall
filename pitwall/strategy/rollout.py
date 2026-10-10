@@ -23,14 +23,16 @@ from pitwall.engine.race import REFUEL_OVERLAP_S
 from pitwall.engine.scenario import Scenario, sample_futures
 from pitwall.strategy.rules import RULES
 
+SHOW_FUTURES = 60  # imagined futures per option sent to the app (out of n)
 PENALTY = 1000.0  # seconds added for a DNF or a disqualification in an imagined future
 
 # Base policies for the imagined futures, as (wear, preferred dry compound or -1 for the rules' choice):
 #   wear > 0: pit when tyre age reaches wear x the compound's cliff lap (0.8 = the simple rules)
 #   wear < 0: plan -wear more stops, splitting the remaining laps into equal stints
 # (0.8, -1) is exactly the simple rules.
-# 8 policies: the simple rules, a longer-stint variant, and 1- or 2-stop equal-stint plans.
-BASES: list[tuple[float, int]] = [(0.8, -1), (1.0, -1), (-1, -1), (-1, 1), (-1, 2), (-2, -1), (-2, 0), (-2, 2)]
+#   wear = 99: no more stops for wear (run to the flag; rain, fuel and the 2-compound rule still apply)
+# 9 policies: the simple rules, a longer-stint variant, run-to-the-flag, and 1- or 2-stop equal-stint plans.
+BASES: list[tuple[float, int]] = [(0.8, -1), (1.0, -1), (99.0, -1), (-1, -1), (-1, 1), (-1, 2), (-2, -1), (-2, 0), (-2, 2)]
 
 
 def _family(cid: np.ndarray) -> np.ndarray:
@@ -46,9 +48,11 @@ def simulate(P: TrackParams, car: CarState, obs: Observation, actions: list[Acti
     B = K * H * n
     status, wet, noise = (np.tile(fut[k], (K * H, 1)) for k in ("status", "wetness", "noise"))
     wear_frac = np.tile(np.repeat([b[0] for b in bases], n), K).astype(float)
-    # equal-stint plans: stint length = (laps left + current tyre age) / (stops + 1)
+    first_pit = np.repeat([a.pit for a in actions], H * n)
+    # equal-stint plans: stint length = (laps left + age of the tyre we'll be on) / (stops + 1);
+    # after "pit now" that tyre is fresh, so its age does not count
     stops = np.maximum(-wear_frac, 0)
-    stint = np.where(wear_frac < 0, np.ceil((R + car.age) / (stops + 1)), 0.0)
+    stint = np.where(wear_frac < 0, np.ceil((R + np.where(first_pit, 0.0, car.age)) / (stops + 1)), 0.0)
     pref = np.tile(np.repeat([b[1] for b in bases], n), K)
     inv = car.inventory
     m = len(inv)
@@ -68,7 +72,6 @@ def simulate(P: TrackParams, car: CarState, obs: Observation, actions: list[Acti
     rows = np.arange(B)
     endurance = P.mode == "endurance"
 
-    first_pit = np.repeat([a.pit for a in actions], H * n)
     ids = [s.set_id for s in inv]
     first_choice = np.repeat([ids.index(a.set_id) if a.pit else -1 for a in actions], H * n)
     first_fuel = np.repeat([a.fuel_add for a in actions], H * n).astype(float)
@@ -214,18 +217,20 @@ class RolloutStrategy:
         means = times.mean(1)
         best = int(np.argmin(means))
         options = {lab: float(v) for (lab, _), v in zip(opts, means)}
+        # a sample of the imagined finishes behind each average, for the app's "inside its head" view
+        samples = {lab: [round(float(x), 1) for x in t[:SHOW_FUTURES]] for (lab, _), t in zip(opts, times)} if self.n >= 20 else {}
         if obs.lap == 0:
-            return Decision(opts[best][1], f"Start on {opts[best][0].split()[1]} (best of {len(opts)} options)", options)
+            return Decision(opts[best][1], f"Start on {opts[best][0].split()[1]} (best of {len(opts)} options)", options, samples)
         stay = 0  # index of "stay out"
         gain = means[stay] - means[best]
         if best == stay or gain < self.hysteresis:
-            return Decision(STAY, "", options)
+            return Decision(STAY, "", options, samples)
         diff = times[stay] - times[best]
         se = diff.std(ddof=1) / np.sqrt(len(diff)) if len(diff) > 1 else 0.0
         why = f"{STATUS_NAMES[obs.status]} now, " if obs.status != GREEN else ""
         if obs.wetness > 0.2:
             why += f"track wetness {obs.wetness:.2f}, "
-        return Decision(opts[best][1], f"Lap {obs.lap}: {why}{opts[best][0]} saves {gain:.1f} s ± {se:.1f} vs staying out", options)
+        return Decision(opts[best][1], f"Lap {obs.lap}: {why}{opts[best][0]} saves {gain:.1f} s ± {se:.1f} vs staying out", options, samples)
 
 
 class Oracle(RolloutStrategy):
